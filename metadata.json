@@ -1,0 +1,6 @@
+{
+  "name": "Farm2Home",
+  "description": "Intelligent direct-to-consumer agri product delivery platform connecting farmers directly with customers and delivery partners.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
