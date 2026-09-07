@@ -1,22 +1,10 @@
 export type UserRole = 'customer' | 'farmer' | 'delivery';
+export type Role = UserRole;
 
-export interface Profile {
-  id: string; // matches auth.uid
-  auth_method: 'phone' | 'email';
-  phone_number?: string;
-  email?: string;
-  full_name: string;
-  role: UserRole;
-  avatar_url?: string;
-  location: string;
-  created_at: string;
-  // Farmer specific fields
-  farm_name?: string;
-  approved?: boolean;
-  certificate_url?: string;
-}
+export type LanguageCode = 'en' | 'te' | 'hi' | 'ta';
+export type Language = LanguageCode;
 
-export type ProductCategory = 
+export type ProductCategory =
   | 'Vegetables'
   | 'Fruits'
   | 'Grains & Cereals'
@@ -26,6 +14,24 @@ export type ProductCategory =
 
 export type ProductUnit = 'kg' | 'gram' | 'bunch' | 'liter' | 'piece';
 
+export type OrderStatus = 'pending' | 'accepted' | 'out_for_delivery' | 'delivered' | 'cancelled';
+
+export interface Profile {
+  id: string; // matches auth.uid
+  auth_method: 'phone' | 'email' | string;
+  phone_number?: string;
+  email?: string;
+  full_name: string;
+  role: UserRole;
+  avatar_url?: string;
+  location?: string;
+  created_at: string;
+  // Farmer specific fields
+  farm_name?: string;
+  approved?: boolean;
+  certificate_url?: string;
+}
+
 export interface Product {
   id: string;
   farmer_id: string;
@@ -33,9 +39,9 @@ export interface Product {
   farmer_location?: string;
   title: string;
   description: string;
-  category: ProductCategory;
+  category: ProductCategory | string;
   price: number;
-  unit: ProductUnit;
+  unit: ProductUnit | string;
   stock: number;
   is_organic: boolean;
   image_url: string;
@@ -49,6 +55,8 @@ export interface CartItem {
   quantity: number;
   added_at: string;
   product?: Product;
+  is_available?: boolean;
+  stock_exceeded?: boolean;
 }
 
 export interface WishlistItem {
@@ -59,26 +67,32 @@ export interface WishlistItem {
   product?: Product;
 }
 
+export interface BrowseHistoryItem {
+  id: string;
+  user_id: string;
+  product_id: string;
+  viewed_at: string;
+  product?: Product;
+}
+
 export interface OrderItem {
   product_id: string;
   title: string;
   price: number;
   quantity: number;
-  unit: ProductUnit;
+  unit: string;
   image_url: string;
 }
-
-export type OrderStatus = 'pending' | 'accepted' | 'out_for_delivery' | 'delivered' | 'cancelled';
 
 export interface Order {
   id: string;
   customer_id: string;
-  customer_name?: string;
+  customer_name: string;
   customer_phone?: string;
   farmer_id: string;
-  farmer_name?: string;
+  farmer_name: string;
   farmer_phone?: string;
-  delivery_partner_id?: string | null;
+  delivery_partner_id: string | null;
   delivery_partner_name?: string;
   items: OrderItem[];
   total_amount: number;
@@ -88,19 +102,11 @@ export interface Order {
   created_at: string;
 }
 
-export interface BrowseHistoryItem {
-  id: string;
-  user_id: string;
-  product_id: string;
-  viewed_at: string;
-  product?: Product;
-}
-
 export interface Review {
   id: string;
   order_id: string;
   customer_id: string;
-  customer_name?: string;
+  customer_name: string;
   farmer_id: string;
   rating: number;
   comment: string;
@@ -116,7 +122,7 @@ export interface DemandAnalytics {
   modeVolume: number;
   topCrops: { title: string; volume: number; revenue: number }[];
   seasonalTrends: { month: string; sales: number; cropName: string }[];
-  plantingSuggestions: { crop: string; demandLevel: 'High' | 'Medium' | 'Critical Shortage'; reason: string }[];
+  plantingSuggestions: { crop: string; demandLevel: 'High' | 'Critical Shortage' | 'Medium'; reason: string }[];
 }
 
 export interface WeatherDay {
@@ -124,11 +130,9 @@ export interface WeatherDay {
   date: string;
   tempMax: number;
   tempMin: number;
-  condition: 'Sunny' | 'Partly Cloudy' | 'Light Rain' | 'Heavy Rain' | 'Thunderstorm';
+  condition: string;
   humidity: number;
   windKm: number;
   rainfallMm: number;
   advisory: string;
 }
-
-export type LanguageCode = 'en' | 'te' | 'hi' | 'ta';
