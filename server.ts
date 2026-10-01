@@ -1,9 +1,11 @@
 import express, { Request, Response } from 'express';
+import http from 'http';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import { agronomistBrain } from './src/services/agronomistBrain.js';
 import {
   Profile,
   Product,
@@ -19,7 +21,7 @@ import {
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
@@ -273,6 +275,7 @@ const initialSeed: DBData = {
       delivery_address: 'Flat 402, Green Valley Apts, Hitech City, Hyderabad - 500081',
       otp_code: '482910',
       created_at: new Date(Date.now() - 2 * 3600000).toISOString(),
+      delivery_fare: 140,
     },
     {
       id: 'ord_9002',
@@ -298,7 +301,93 @@ const initialSeed: DBData = {
       status: 'delivered',
       delivery_address: 'Flat 402, Green Valley Apts, Hitech City, Hyderabad - 500081',
       otp_code: '123456',
-      created_at: new Date(Date.now() - 24 * 3600000).toISOString(),
+      created_at: new Date(Date.now() - 6 * 3600000).toISOString(),
+      completed_at: new Date(Date.now() - 3 * 3600000).toISOString(),
+      delivery_fare: 180,
+    },
+    {
+      id: 'ord_9003',
+      customer_id: 'usr_rahul_customer',
+      customer_name: 'Rahul Verma',
+      customer_phone: '+91 99887 76655',
+      farmer_id: 'usr_ramesh_farmer',
+      farmer_name: 'Ramesh Kumar (Green Earth)',
+      farmer_phone: '+91 98765 43210',
+      delivery_partner_id: 'usr_vikram_delivery',
+      delivery_partner_name: 'Vikram Singh',
+      items: [
+        {
+          product_id: 'prod_102',
+          title: 'Farm Fresh Palak Bunch',
+          price: 25,
+          quantity: 4,
+          unit: 'bunch',
+          image_url: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?auto=format&fit=crop&q=80&w=800',
+        },
+      ],
+      total_amount: 100,
+      status: 'delivered',
+      delivery_address: 'Villa 12, Palm Meadows, Jubilee Hills, Hyderabad - 500033',
+      otp_code: '948217',
+      created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+      completed_at: new Date(Date.now() - 2 * 86400000 + 45 * 60000).toISOString(),
+      delivery_fare: 160,
+    },
+    {
+      id: 'ord_9004',
+      customer_id: 'usr_rahul_customer',
+      customer_name: 'Ananya Sharma',
+      customer_phone: '+91 97711 22334',
+      farmer_id: 'usr_saraswathi_farmer',
+      farmer_name: 'Saraswathi Devi',
+      farmer_phone: '+91 91234 56789',
+      delivery_partner_id: 'usr_vikram_delivery',
+      delivery_partner_name: 'Vikram Singh',
+      items: [
+        {
+          product_id: 'prod_103',
+          title: 'Premium Banganapalli Mangoes',
+          price: 130,
+          quantity: 6,
+          unit: 'kg',
+          image_url: 'https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=800',
+        },
+      ],
+      total_amount: 780,
+      status: 'delivered',
+      delivery_address: 'B-304, Cyber Heights, Madhapur, Hyderabad - 500081',
+      otp_code: '319842',
+      created_at: new Date(Date.now() - 9 * 86400000).toISOString(),
+      completed_at: new Date(Date.now() - 9 * 86400000 + 55 * 60000).toISOString(),
+      delivery_fare: 220,
+    },
+    {
+      id: 'ord_9005',
+      customer_id: 'usr_rahul_customer',
+      customer_name: 'Praveen Reddy',
+      customer_phone: '+91 96622 33445',
+      farmer_id: 'usr_ramesh_farmer',
+      farmer_name: 'Ramesh Kumar (Green Earth)',
+      farmer_phone: '+91 98765 43210',
+      delivery_partner_id: 'usr_vikram_delivery',
+      delivery_partner_name: 'Vikram Singh',
+      items: [
+        {
+          product_id: 'prod_101',
+          title: 'Vine-Ripened Organic Tomatoes',
+          price: 42,
+          quantity: 5,
+          unit: 'kg',
+          image_url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&q=80&w=800',
+        },
+      ],
+      total_amount: 210,
+      status: 'delivered',
+      delivery_address: 'Plot 88, Road 10, Banjara Hills, Hyderabad - 500034',
+      otp_code: '625184',
+      created_at: new Date(Date.now() - 22 * 86400000).toISOString(),
+      completed_at: new Date(Date.now() - 22 * 86400000 + 40 * 60000).toISOString(),
+      delivery_fare: 175,
     },
   ],
   browse_history: [],
@@ -899,6 +988,7 @@ app.post('/api/orders', (req: Request, res: Response) => {
       delivery_partner_id: null,
       items: orderItems,
       total_amount: totalAmount,
+      delivery_fare: Math.max(80, Math.round(60 + totalAmount * 0.15)),
       status: 'pending',
       delivery_address: deliveryAddress.trim(),
       otp_code: otpCode,
@@ -1004,6 +1094,10 @@ app.patch('/api/orders/:id/status', (req: Request, res: Response) => {
         return res.status(400).json({ error: 'Invalid Delivery OTP Code. Please verify the 6-digit code with the customer.' });
       }
       order.status = 'delivered';
+      order.completed_at = new Date().toISOString();
+      if (!order.delivery_fare) {
+        order.delivery_fare = Math.max(80, Math.round(60 + order.total_amount * 0.15));
+      }
     } else {
       return res.status(400).json({ error: `Invalid status transition for delivery partner: ${status}` });
     }
@@ -1136,6 +1230,7 @@ app.get('/api/weather', (req: Request, res: Response) => {
       humidity: 78,
       windKm: 14,
       rainfallMm: 2,
+      rainProbability: 25,
       advisory: 'Optimal condition for evening irrigation and fresh leaf harvesting.',
     },
     {
@@ -1147,6 +1242,7 @@ app.get('/api/weather', (req: Request, res: Response) => {
       humidity: 84,
       windKm: 18,
       rainfallMm: 12,
+      rainProbability: 75,
       advisory: 'Hold fertilizer sprays due to expected afternoon rain showers.',
     },
     {
@@ -1158,6 +1254,7 @@ app.get('/api/weather', (req: Request, res: Response) => {
       humidity: 91,
       windKm: 24,
       rainfallMm: 38,
+      rainProbability: 95,
       advisory: 'Ensure clear field drainage channels to prevent root rot in tomato plots.',
     },
     {
@@ -1169,6 +1266,7 @@ app.get('/api/weather', (req: Request, res: Response) => {
       humidity: 75,
       windKm: 12,
       rainfallMm: 4,
+      rainProbability: 35,
       advisory: 'Favorable window for soil aeration and natural neem oil pest prevention.',
     },
     {
@@ -1180,6 +1278,7 @@ app.get('/api/weather', (req: Request, res: Response) => {
       humidity: 65,
       windKm: 10,
       rainfallMm: 0,
+      rainProbability: 10,
       advisory: 'Great harvesting weather for fruit orchards and grain drying.',
     },
     {
@@ -1191,6 +1290,7 @@ app.get('/api/weather', (req: Request, res: Response) => {
       humidity: 62,
       windKm: 11,
       rainfallMm: 0,
+      rainProbability: 10,
       advisory: 'Ideal sunshine for sun-drying turmeric, pulses, and seeds.',
     },
     {
@@ -1202,6 +1302,7 @@ app.get('/api/weather', (req: Request, res: Response) => {
       humidity: 80,
       windKm: 16,
       rainfallMm: 8,
+      rainProbability: 60,
       advisory: 'Pre-monsoon drip irrigation scheduling recommended for next crop cycle.',
     },
   ];
@@ -1209,66 +1310,107 @@ app.get('/api/weather', (req: Request, res: Response) => {
   res.json({ forecast: days });
 });
 
-// 9. AI Farming Assistant (Gemini API Server-Side)
+// 9. AI Farming Assistant (Farm2Home AI Agronomist - Gemini 3.8 Flash Server-Side)
 app.post('/api/ai/assistant', async (req: Request, res: Response) => {
-  const { prompt, language, role } = req.body;
+  const { prompt, language, role, userId, history, image } = req.body;
 
-  if (!prompt) {
+  if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
     return res.status(400).json({ error: 'Prompt is required' });
   }
 
-  if (!ai) {
-    // Graceful fallback response if GEMINI_API_KEY is not yet attached
-    return res.json({
-      answer:
-        '🌾 **Farm2Home AI Specialist**: I am ready to help! To activate deep AI reasoning for crop health, disease diagnosis, and dynamic market trends, please ensure your GEMINI_API_KEY secret is configured in AI Studio Settings.',
-    });
-  }
-
   try {
-    const langInstructions: Record<string, string> = {
-      te: 'Respond primarily in Telugu (తెలుగు) with clear bullet points.',
-      hi: 'Respond primarily in Hindi (हिन्दी) with clear bullet points.',
-      ta: 'Respond primarily in Tamil (தமிழ்) with clear bullet points.',
-      en: 'Respond in clear English with concise structured formatting and bullet points.',
-    };
+    const db = getDB();
+    const effectiveRole = role || 'farmer';
+    let userName: string | undefined;
+    let farmerProducts: Product[] = [];
+    let farmerOrders: Order[] = [];
 
-    const systemInstruction = `You are "Farm2Home AI Specialist", an expert agricultural advisor and farm-to-consumer strategist.
-You assist local farmers, customers, and delivery partners with:
-1. Crop care, organic pest control, soil health, fertilizer ratios (NPK), and irrigation schedules.
-2. Market pricing guidance, direct-to-consumer demand forecasting, and crop harvest timing.
-3. Healthy organic food nutrition and storage tips for customers.
-4. Optimal farm delivery logistics and temperature preservation for perishable produce.
+    if (userId) {
+      const userProfile = db.profiles.find((p) => p.id === userId);
+      if (userProfile) {
+        userName = userProfile.full_name;
+      }
+    }
 
-Tone: Encouraging, knowledgeable, clear, practical.
-User Role: ${role || 'customer'}.
-Language Preference: ${langInstructions[language as string] || langInstructions.en}`;
+    if (effectiveRole === 'farmer') {
+      if (userId) {
+        farmerProducts = db.products.filter((p) => p.farmer_id === userId);
+        farmerOrders = db.orders.filter((o) => o.farmer_id === userId);
+      } else {
+        // Default to Ramesh Kumar if unauthenticated or testing
+        farmerProducts = db.products.filter((p) => p.farmer_id === 'usr_ramesh_farmer');
+        farmerOrders = db.orders.filter((o) => o.farmer_id === 'usr_ramesh_farmer');
+      }
+    }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        systemInstruction,
-        temperature: 0.7,
+    const availableMarketProducts = db.products.filter((p) => p.stock > 0);
+    const weatherForecast = [
+      {
+        day: 'Today',
+        date: 'Aug 3',
+        tempMax: 31,
+        tempMin: 22,
+        condition: 'Partly Cloudy',
+        humidity: 78,
+        windKm: 14,
+        rainfallMm: 2,
+        advisory: 'Optimal condition for evening irrigation and fresh leaf harvesting.',
       },
+      {
+        day: 'Tomorrow',
+        date: 'Aug 4',
+        tempMax: 29,
+        tempMin: 21,
+        condition: 'Light Rain',
+        humidity: 84,
+        windKm: 18,
+        rainfallMm: 12,
+        advisory: 'Hold fertilizer sprays due to expected afternoon rain showers.',
+      },
+    ];
+
+    const result = await agronomistBrain.consultAgronomist({
+      prompt: prompt.trim(),
+      context: {
+        role: effectiveRole,
+        userId,
+        userName,
+        language: language || 'en',
+        farmerProducts,
+        farmerOrders,
+        availableMarketProducts,
+        weatherForecast,
+      },
+      history: Array.isArray(history) ? history : [],
+      image: image?.inlineData?.data ? image : undefined,
     });
 
-    const answer = response.text || 'Unable to generate response at this time.';
-    res.json({ answer });
+    // Return backward-compatible { answer } along with rich metadata
+    res.json(result);
   } catch (error) {
-    console.error('Gemini Assistant Error:', error);
-    res.status(500).json({
-      error: 'Failed to consult AI Assistant',
-      details: error instanceof Error ? error.message : String(error),
+    console.error('AI Agronomist Server Error:', error);
+    res.status(503).json({
+      answer: 'Farm2Home AI Agronomist is temporarily busy. Please try again in a moment.',
+      language: req.body?.language || 'en',
+      category: 'service_notice',
+      confidence: 'low',
+      needs_more_information: false,
+      follow_up_questions: [],
+      warnings: ['Farm2Home AI Agronomist is temporarily busy. Please try again in a moment.'],
     });
   }
 });
 
 // Start Server with Vite Integration
 async function startServer() {
+  const httpServer = http.createServer(app);
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: { server: httpServer },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -1280,7 +1422,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`🌾 Farm2Home Server running on http://0.0.0.0:${PORT}`);
   });
 }

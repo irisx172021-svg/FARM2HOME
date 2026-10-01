@@ -8,6 +8,7 @@ import {
   DemandAnalytics,
   WeatherDay,
   Role,
+  AssistantResponse,
 } from '../types';
 
 export const api = {
@@ -238,16 +239,32 @@ export const api = {
     return res.json();
   },
 
-  // AI Assistant
-  async askAiAssistant(prompt: string, language: string = 'en', role: Role = 'customer'): Promise<{ answer: string }> {
+  // AI Assistant (Farm2Home Agronomist Brain)
+  async askAiAssistant(
+    prompt: string,
+    language: string = 'en',
+    role: Role = 'customer',
+    options?: {
+      userId?: string;
+      history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+      image?: { inlineData: { mimeType: string; data: string } };
+    }
+  ): Promise<AssistantResponse> {
     const res = await fetch('/api/ai/assistant', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, language, role }),
+      body: JSON.stringify({
+        prompt,
+        language,
+        role,
+        userId: options?.userId,
+        history: options?.history,
+        image: options?.image,
+      }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'AI Assistant consultation failed');
+      throw new Error(err.error || err.answer || 'AI Assistant consultation failed');
     }
     return res.json();
   },

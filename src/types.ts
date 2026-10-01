@@ -100,6 +100,9 @@ export interface Order {
   delivery_address: string;
   otp_code: string;
   created_at: string;
+  delivery_fare?: number;
+  completed_at?: string;
+  distance_km?: number;
 }
 
 export interface Review {
@@ -135,4 +138,55 @@ export interface WeatherDay {
   windKm: number;
   rainfallMm: number;
   advisory: string;
+  rainProbability?: number;
 }
+
+export interface CropActionPlan {
+  prepare: string;
+  plant: string;
+  monitor: string;
+  respondToWeather: string;
+  harvest: string;
+}
+
+export interface CropSuggestion {
+  id?: string;
+  cropName: string;
+  whySuitable: string;
+  suitableSoil: string;
+  soilSuitabilityDetail?: string;
+  areaSuitabilityDetail?: string;
+  seasonWeatherDetail?: string;
+  growingDuration: string;
+  waterRequirement: string;
+  suitableSeason: string;
+  weatherSuitability: string;
+  importantRisks: string;
+  expectedCareLevel: 'Low' | 'Moderate' | 'High';
+  basicCareRequirements?: string;
+  suggestedNextSteps: string[];
+  actionPlan: CropActionPlan;
+}
+
+export interface CropPlannerInputs {
+  landArea: number | '';
+  areaUnit: 'acres' | 'hectares';
+  soilType: string;
+  location: string;
+  waterAvailability?: string;
+  currentSeason?: string;
+  previousCrop?: string;
+  farmingGoal?: string;
+  organicPreference?: string;
+}
+
+export interface AssistantResponse {
+  answer: string;
+  language?: string;
+  category?: string;
+  confidence?: 'high' | 'medium' | 'low';
+  needs_more_information?: boolean;
+  follow_up_questions?: string[];
+  warnings?: string[];
+}
+

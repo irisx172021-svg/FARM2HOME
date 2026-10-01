@@ -2,41 +2,44 @@
 
 @layer base {
   :root {
-    --natural-bg: #fdfcf9;
-    --natural-surface: #ffffff;
-    --natural-surface-muted: #f5f7f2;
-    --natural-border: #e2e8e0;
-    --natural-border-dark: #2d4a3e;
-    --natural-text-main: #21332a;
-    --natural-text-muted: #566960;
-    --natural-primary: #2d6a4f;
-    --natural-primary-dark: #1b4332;
-    --natural-primary-light: #52b788;
-    --natural-accent-sage: #74c69d;
-    --natural-accent-earth: #c05621;
-    --natural-accent-ochre: #d97706;
+    --bg-primary: #09090b;
+    --surface-card: #0f1115;
+    --surface-card-subtle: #121418;
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-highlight: rgba(34, 197, 94, 0.3);
+    --text-primary: #ffffff;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --accent-emerald: #22c55e;
+    --accent-emerald-hover: #10b981;
   }
 
   body {
-    @apply bg-stone-50 text-stone-900 antialiased min-h-screen font-sans;
+    background-color: #09090b;
+    color: #ffffff;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
   }
 }
 
-/* Custom scrollbar styling for natural aesthetic */
+/* Custom scrollbar styling for modern dark SaaS aesthetic */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f4ee;
+  background: #09090b;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #b5c7ba;
+  background: #27272a;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #8aa692;
+  background: #3f3f46;
 }
+
