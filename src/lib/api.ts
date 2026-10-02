@@ -103,7 +103,7 @@ export const api = {
     return res.json();
   },
 
-  async deleteProduct(id: string, farmerId: string): Promise<{ success: boolean }> {
+  async deleteProduct(id: string, farmerId: string): Promise<{ success: boolean; deletedId: string }> {
     const res = await fetch(`/api/products/${id}?farmerId=${farmerId}`, {
       method: 'DELETE',
     });
@@ -129,7 +129,7 @@ export const api = {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to add item to cart');
+      throw new Error(err.error || 'Failed to add to cart');
     }
     return res.json();
   },
@@ -168,7 +168,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, productId }),
     });
-    if (!res.ok) throw new Error('Failed to update wishlist');
+    if (!res.ok) throw new Error('Failed to toggle wishlist');
     return res.json();
   },
 
@@ -190,8 +190,10 @@ export const api = {
   },
 
   // Orders
-  async getOrders(userId: string, role: Role): Promise<{ orders: Order[] }> {
-    const res = await fetch(`/api/orders?userId=${userId}&role=${role}`);
+  async getOrders(userId: string, role?: Role): Promise<{ orders: Order[] }> {
+    const query = new URLSearchParams({ userId });
+    if (role) query.set('role', role);
+    const res = await fetch(`/api/orders?${query.toString()}`);
     if (!res.ok) throw new Error('Failed to fetch orders');
     return res.json();
   },
@@ -270,7 +272,6 @@ export const api = {
   },
 };
 
-// Backwards-compatible alias for uppercase API
 export const API = {
   ...api,
   createOrder: api.checkout,

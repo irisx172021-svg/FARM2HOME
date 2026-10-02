@@ -298,12 +298,12 @@ const initialSeed: DBData = {
         },
       ],
       total_amount: 650,
-      status: 'delivered',
-      delivery_address: 'Flat 402, Green Valley Apts, Hitech City, Hyderabad - 500081',
-      otp_code: '123456',
-      created_at: new Date(Date.now() - 6 * 3600000).toISOString(),
+      status: 'accepted',
+      delivery_address: 'Flat 402, Green Valley Apts, Hitech City',
+      otp_code: '591204',
+      created_at: new Date(Date.now() - 4 * 3600000).toISOString(),
       completed_at: new Date(Date.now() - 3 * 3600000).toISOString(),
-      delivery_fare: 180,
+      delivery_fare: 160,
     },
     {
       id: 'ord_9003',
@@ -317,27 +317,27 @@ const initialSeed: DBData = {
       delivery_partner_name: 'Vikram Singh',
       items: [
         {
-          product_id: 'prod_102',
-          title: 'Farm Fresh Palak Bunch',
-          price: 25,
-          quantity: 4,
-          unit: 'bunch',
-          image_url: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?auto=format&fit=crop&q=80&w=800',
+          product_id: 'prod_101',
+          title: 'Vine-Ripened Organic Tomatoes',
+          price: 42,
+          quantity: 2,
+          unit: 'kg',
+          image_url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&q=80&w=800',
         },
       ],
       total_amount: 100,
       status: 'delivered',
-      delivery_address: 'Villa 12, Palm Meadows, Jubilee Hills, Hyderabad - 500033',
-      otp_code: '948217',
-      created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
-      completed_at: new Date(Date.now() - 2 * 86400000 + 45 * 60000).toISOString(),
+      delivery_address: 'Villa 12, Palm Meadows, Jubilee Hills',
+      otp_code: '847291',
+      created_at: new Date(Date.now() - 2 * 86400000 - 3600000).toISOString(),
+      completed_at: new Date(Date.now() - 2 * 86400000).toISOString(),
       delivery_fare: 160,
     },
     {
       id: 'ord_9004',
       customer_id: 'usr_rahul_customer',
       customer_name: 'Ananya Sharma',
-      customer_phone: '+91 97711 22334',
+      customer_phone: '+91 98112 23344',
       farmer_id: 'usr_saraswathi_farmer',
       farmer_name: 'Saraswathi Devi',
       farmer_phone: '+91 91234 56789',
@@ -441,7 +441,7 @@ getDB();
 
 // 1. Auth & Profiles
 app.post('/api/auth/login', (req: Request, res: Response) => {
-  const { authMethod, identifier, password, role, fullName, farmName, location } = req.body;
+  const { authMethod, identifier, role, fullName, farmName, location } = req.body;
   const db = getDB();
 
   let existing = db.profiles.find((p) =>
@@ -650,7 +650,7 @@ app.delete('/api/products/:id', (req: Request, res: Response) => {
   res.json({ success: true, deletedId: req.params.id });
 });
 
-// 3. Cart Management (Isolated per User & Strict Stock Verification)
+// 3. Cart Management
 app.get('/api/cart', (req: Request, res: Response) => {
   const userId = req.query.userId as string;
   if (!userId) return res.status(400).json({ error: 'Missing userId parameter' });
@@ -753,7 +753,6 @@ app.put('/api/cart/:id', (req: Request, res: Response) => {
 
   const product = db.products.find((p) => p.id === cartItem.product_id);
   if (!product) {
-    // Product was deleted from system, remove item from cart
     db.carts.splice(itemIndex, 1);
     saveDB(db);
     return res.status(400).json({ error: 'Product is no longer available and was removed from your cart' });
@@ -783,7 +782,7 @@ app.delete('/api/cart/:id', (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-// 4. Wishlist (Isolated per User)
+// 4. Wishlist
 app.get('/api/wishlist', (req: Request, res: Response) => {
   const userId = req.query.userId as string;
   if (!userId) return res.status(400).json({ error: 'Missing userId parameter' });
@@ -823,7 +822,7 @@ app.post('/api/wishlist/toggle', (req: Request, res: Response) => {
   res.json({ isWishlisted });
 });
 
-// 5. Browse History (Isolated per User)
+// 5. Browse History
 app.get('/api/browse-history', (req: Request, res: Response) => {
   const userId = req.query.userId as string;
   if (!userId) return res.status(400).json({ error: 'Missing userId parameter' });
@@ -846,7 +845,6 @@ app.post('/api/browse-history', (req: Request, res: Response) => {
   if (!userId || !productId) return res.status(400).json({ error: 'userId and productId required' });
 
   const db = getDB();
-  // Filter out any existing view of same product for clean chronological history
   db.browse_history = db.browse_history.filter((h) => !(h.user_id === userId && h.product_id === productId));
 
   db.browse_history.unshift({
@@ -856,7 +854,6 @@ app.post('/api/browse-history', (req: Request, res: Response) => {
     viewed_at: new Date().toISOString(),
   });
 
-  // Limit history per user to 30 items
   const userHist = db.browse_history.filter((h) => h.user_id === userId);
   if (userHist.length > 30) {
     const oldest = userHist[userHist.length - 1];
@@ -880,14 +877,12 @@ app.get('/api/orders', (req: Request, res: Response) => {
   } else if (role === 'farmer') {
     list = list.filter((o) => o.farmer_id === String(userId));
   } else if (role === 'delivery') {
-    // Delivery partner sees open unassigned jobs ('accepted' without partner) OR assigned jobs ('out_for_delivery' or 'delivered' by them)
     list = list.filter(
       (o) =>
         (o.status === 'accepted' && !o.delivery_partner_id) ||
         o.delivery_partner_id === String(userId)
     );
   } else {
-    // Default fallback to customer scoping
     list = list.filter((o) => o.customer_id === String(userId));
   }
 
@@ -895,7 +890,6 @@ app.get('/api/orders', (req: Request, res: Response) => {
   res.json({ orders: list });
 });
 
-// Create Order from Cart with Atomic Inventory Validation
 app.post('/api/orders', (req: Request, res: Response) => {
   const { userId, deliveryAddress } = req.body;
   if (!userId || !deliveryAddress || typeof deliveryAddress !== 'string' || !deliveryAddress.trim()) {
@@ -914,8 +908,6 @@ app.post('/api/orders', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Your cart is empty. Please add items before checking out.' });
   }
 
-  // ATOMIC VALIDATION PASS
-  // 1. Verify every cart item exists in products, has valid stock, and positive valid quantity
   const validatedItems: { product: Product; quantity: number }[] = [];
 
   for (const item of userCart) {
@@ -948,7 +940,6 @@ app.post('/api/orders', (req: Request, res: Response) => {
     validatedItems.push({ product: prod, quantity: qty });
   }
 
-  // Group items by farmer_id to create clean individual orders per farmer
   const itemsByFarmer: Record<string, { product: Product; quantity: number }[]> = {};
   for (const vi of validatedItems) {
     if (!itemsByFarmer[vi.product.farmer_id]) {
@@ -959,7 +950,6 @@ app.post('/api/orders', (req: Request, res: Response) => {
 
   const createdOrders: Order[] = [];
 
-  // Deduct stock and assemble orders
   for (const [farmerId, farmerItems] of Object.entries(itemsByFarmer)) {
     const farmer = db.profiles.find((p) => p.id === farmerId);
 
@@ -973,8 +963,6 @@ app.post('/api/orders', (req: Request, res: Response) => {
     }));
 
     const totalAmount = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-
-    // Generate unique 6-digit delivery OTP code
     const otpCode = String(Math.floor(100000 + Math.random() * 900000));
 
     const newOrder: Order = {
@@ -995,7 +983,6 @@ app.post('/api/orders', (req: Request, res: Response) => {
       created_at: new Date().toISOString(),
     };
 
-    // Deduct stock strictly
     for (const fi of farmerItems) {
       const prodIndex = db.products.findIndex((p) => p.id === fi.product.id);
       if (prodIndex !== -1) {
@@ -1007,14 +994,13 @@ app.post('/api/orders', (req: Request, res: Response) => {
     createdOrders.push(newOrder);
   }
 
-  // Clear customer cart ONLY after validation and order creation succeed
   db.carts = db.carts.filter((c) => c.user_id !== userId);
 
   saveDB(db);
   res.status(201).json({ success: true, orders: createdOrders });
 });
 
-// Update Order Status (Accept/Reject with Stock Restoration, Pickup, Deliver via OTP)
+// Update Order Status
 app.patch('/api/orders/:id/status', (req: Request, res: Response) => {
   const { userId, role, status, otpCode } = req.body;
   if (!userId || !role || !status) {
@@ -1029,7 +1015,6 @@ app.patch('/api/orders/:id/status', (req: Request, res: Response) => {
 
   const order = db.orders[orderIndex];
 
-  // Terminal states cannot be altered
   if (order.status === 'delivered') {
     return res.status(400).json({ error: 'Order has already been delivered and completed. Status cannot be changed.' });
   }
@@ -1042,7 +1027,6 @@ app.patch('/api/orders/:id/status', (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Forbidden: You can only update orders for your own farm' });
     }
 
-    // Farmer can only transition from 'pending'
     if (order.status !== 'pending') {
       return res.status(400).json({ error: `Order is already in '${order.status}' state and cannot be modified by farmer.` });
     }
@@ -1050,7 +1034,6 @@ app.patch('/api/orders/:id/status', (req: Request, res: Response) => {
     if (status === 'accepted') {
       order.status = 'accepted';
     } else if (status === 'cancelled') {
-      // Order Rejection: restore inventory stock!
       order.status = 'cancelled';
       for (const item of order.items) {
         const prodIdx = db.products.findIndex((p) => p.id === item.product_id);
@@ -1068,11 +1051,9 @@ app.patch('/api/orders/:id/status', (req: Request, res: Response) => {
     }
 
     if (status === 'out_for_delivery') {
-      // Must be currently 'accepted'
       if (order.status !== 'accepted') {
         return res.status(409).json({ error: `Delivery job is no longer available (current status: ${order.status}).` });
       }
-      // Cannot claim if another delivery partner already claimed it
       if (order.delivery_partner_id && order.delivery_partner_id !== userId) {
         return res.status(409).json({ error: 'This delivery job has already been claimed by another delivery partner.' });
       }
@@ -1081,15 +1062,12 @@ app.patch('/api/orders/:id/status', (req: Request, res: Response) => {
       order.delivery_partner_id = userId;
       order.delivery_partner_name = partner.full_name;
     } else if (status === 'delivered') {
-      // Must be out for delivery
       if (order.status !== 'out_for_delivery') {
         return res.status(400).json({ error: 'Order must be out for delivery before it can be marked as delivered.' });
       }
-      // Must be assigned to this delivery partner
       if (order.delivery_partner_id !== userId) {
         return res.status(403).json({ error: 'Forbidden: You are not the assigned delivery partner for this order.' });
       }
-      // Must verify OTP
       if (!otpCode || String(otpCode).trim() !== String(order.otp_code).trim()) {
         return res.status(400).json({ error: 'Invalid Delivery OTP Code. Please verify the 6-digit code with the customer.' });
       }
@@ -1114,17 +1092,13 @@ app.get('/api/farmer/analytics/:farmerId', (req: Request, res: Response) => {
   const db = getDB();
   const farmerId = req.params.farmerId;
 
-  // Filter orders for this farmer
   const farmerOrders = db.orders.filter((o) => o.farmer_id === farmerId);
-
-  // Completed/delivered orders for finalized revenue and statistical calculation
   const completedOrders = farmerOrders.filter((o) => o.status === 'delivered');
 
   const totalOrders = completedOrders.length;
   const totalRevenue = completedOrders.reduce((sum, o) => sum + o.total_amount, 0);
   const aov = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
 
-  // Calculate Crop Volumes strictly from valid completed orders (or non-cancelled if early stage)
   const calculationOrders = completedOrders.length > 0
     ? completedOrders
     : farmerOrders.filter((o) => o.status !== 'cancelled');
@@ -1143,11 +1117,9 @@ app.get('/api/farmer/analytics/:farmerId', (req: Request, res: Response) => {
     }
   }
 
-  // Mean volume
   const sumVol = allQuantities.reduce((a, b) => a + b, 0);
   const meanVolume = allQuantities.length > 0 ? Number((sumVol / allQuantities.length).toFixed(1)) : 0;
 
-  // Median volume
   const sorted = [...allQuantities].sort((a, b) => a - b);
   let medianVolume = 0;
   if (sorted.length > 0) {
@@ -1155,7 +1127,6 @@ app.get('/api/farmer/analytics/:farmerId', (req: Request, res: Response) => {
     medianVolume = sorted.length % 2 !== 0 ? sorted[mid] : Number(((sorted[mid - 1] + sorted[mid]) / 2).toFixed(1));
   }
 
-  // Mode volume (handle 0 mode, 1 mode, or multiple modes)
   const freqMap: Record<number, number> = {};
   let maxFreq = 0;
   for (const q of allQuantities) {
@@ -1177,7 +1148,6 @@ app.get('/api/farmer/analytics/:farmerId', (req: Request, res: Response) => {
 
   const topCrops = Object.values(cropVolumes).sort((a, b) => b.volume - a.volume);
 
-  // Seasonal Trends & Planting Suggestions (Data-based market projections)
   const seasonalTrends = [
     { month: 'May', sales: 120, cropName: 'Tomatoes & Mangoes' },
     { month: 'Jun', sales: 210, cropName: 'Organic Greens & Papayas' },
@@ -1337,7 +1307,6 @@ app.post('/api/ai/assistant', async (req: Request, res: Response) => {
         farmerProducts = db.products.filter((p) => p.farmer_id === userId);
         farmerOrders = db.orders.filter((o) => o.farmer_id === userId);
       } else {
-        // Default to Ramesh Kumar if unauthenticated or testing
         farmerProducts = db.products.filter((p) => p.farmer_id === 'usr_ramesh_farmer');
         farmerOrders = db.orders.filter((o) => o.farmer_id === 'usr_ramesh_farmer');
       }
@@ -1385,7 +1354,6 @@ app.post('/api/ai/assistant', async (req: Request, res: Response) => {
       image: image?.inlineData?.data ? image : undefined,
     });
 
-    // Return backward-compatible { answer } along with rich metadata
     res.json(result);
   } catch (error) {
     console.error('AI Agronomist Server Error:', error);
