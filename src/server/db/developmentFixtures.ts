@@ -1,0 +1,619 @@
+import { Profile, Product, Order, Review, CartItem } from '../../types.js';
+
+/**
+ * Farm2Home Development & Test Fixtures
+ * 
+ * Provides static, immutable TypeScript constants for development personas,
+ * mock catalog items, sample orders, and reviews.
+ * 
+ * Isolates development sandbox behavior from runtime JSON file dependency.
+ */
+
+export const DEVELOPMENT_PROFILES: Profile[] = [
+  {
+    "id": "usr_ramesh_farmer",
+    "auth_method": "phone",
+    "phone_number": "+91 98765 43210",
+    "email": "ramesh.greenearth@farm2home.org",
+    "full_name": "Ramesh Kumar",
+    "fullName": "Ramesh Kumar",
+    "name": "Ramesh Kumar",
+    "role": "farmer",
+    "avatar_url": "https://images.unsplash.com/photo-1595273670150-bd0c3c392e46?auto=format&fit=crop&q=80&w=200",
+    "location": "Medak, Telangana",
+    "created_at": "2026-10-02T10:18:29.593Z",
+    "preferred_language": "en",
+    "farm_name": "Green Earth Organic Acres",
+    "certificate_url": "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&q=80&w=600",
+    "approved": true
+  },
+  {
+    "id": "usr_saraswathi_farmer",
+    "auth_method": "phone",
+    "phone_number": "+91 91234 56789",
+    "email": "saraswathi.sunrise@farm2home.org",
+    "full_name": "Saraswathi Devi",
+    "fullName": "Saraswathi Devi",
+    "name": "Saraswathi Devi",
+    "role": "farmer",
+    "avatar_url": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200",
+    "location": "Chittoor, Andhra Pradesh",
+    "created_at": "2026-10-02T10:18:29.595Z",
+    "preferred_language": "en",
+    "farm_name": "Sunrise Natural Orchards",
+    "certificate_url": "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&q=80&w=600",
+    "approved": true
+  },
+  {
+    "id": "usr_anil_farmer",
+    "auth_method": "phone",
+    "email": "anil.krishna@farm2home.org",
+    "full_name": "Anil Reddy",
+    "fullName": "Anil Reddy",
+    "name": "Anil Reddy",
+    "role": "farmer",
+    "avatar_url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200",
+    "location": "Vijayawada, Andhra Pradesh",
+    "created_at": "2026-10-02T10:18:29.595Z",
+    "preferred_language": "en",
+    "farm_name": "Krishna Delta Pulses & Grains",
+    "certificate_url": null,
+    "approved": true
+  },
+  {
+    "id": "usr_rahul_customer",
+    "auth_method": "phone",
+    "phone_number": "+91 99887 76655",
+    "email": "rahul.v@gmail.com",
+    "full_name": "Rahul Verma",
+    "fullName": "Rahul Verma",
+    "name": "Rahul Verma",
+    "role": "customer",
+    "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200",
+    "location": "Hitech City, Hyderabad",
+    "created_at": "2026-10-02T10:18:29.596Z",
+    "preferred_language": "en"
+  },
+  {
+    "id": "usr_vikram_delivery",
+    "auth_method": "phone",
+    "phone_number": "+91 97766 55443",
+    "email": "vikram.express@farm2home.org",
+    "full_name": "Vikram Singh",
+    "fullName": "Vikram Singh",
+    "name": "Vikram Singh",
+    "role": "delivery",
+    "avatar_url": "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&q=80&w=200",
+    "location": "Hyderabad Metro Zone",
+    "created_at": "2026-10-02T10:18:29.596Z",
+    "preferred_language": "en"
+  },
+  {
+    "id": "usr_1790931359955_e7e785",
+    "auth_method": "phone",
+    "phone_number": "+919811223344",
+    "email": "priya.sharma.1790931359859@example.com",
+    "full_name": "Priya Sharma",
+    "fullName": "Priya Sharma",
+    "name": "Priya Sharma",
+    "role": "customer",
+    "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200",
+    "location": "Hyderabad",
+    "created_at": "2026-10-02T10:18:29.597Z",
+    "preferred_language": "en"
+  },
+  {
+    "id": "usr_1790935390573_cbae38",
+    "auth_method": "phone",
+    "email": "farmer.consumer@gmail.com",
+    "full_name": "Verified Google Member",
+    "fullName": "Verified Google Member",
+    "name": "Verified Google Member",
+    "role": "customer",
+    "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200",
+    "location": "Telangana / Andhra Region",
+    "created_at": "2026-10-02T10:18:29.597Z",
+    "preferred_language": "en"
+  },
+  {
+    "id": "usr_1790937352954_b29959",
+    "auth_method": "phone",
+    "email": "damireddy4@gmail.com",
+    "full_name": "oje[fa[pfojwe[f4f",
+    "fullName": "oje[fa[pfojwe[f4f",
+    "name": "oje[fa[pfojwe[f4f",
+    "role": "customer",
+    "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200",
+    "location": "Hyderabad Metro Zone",
+    "created_at": "2026-10-02T10:35:52.954Z",
+    "preferred_language": "en"
+  },
+  {
+    "id": "usr_1790937389711_b3ede1",
+    "auth_method": "phone",
+    "email": "testuser@farm2home.com",
+    "full_name": "Test User",
+    "fullName": "Test User",
+    "name": "Test User",
+    "role": "customer",
+    "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200",
+    "location": "Andhra & Telangana Agri Region",
+    "created_at": "2026-10-02T10:36:29.711Z",
+    "preferred_language": "en"
+  },
+  {
+    "id": "usr_1790937409115_27ca81",
+    "auth_method": "phone",
+    "email": "verified_user@farm2home.com",
+    "full_name": "Verified User",
+    "fullName": "Verified User",
+    "name": "Verified User",
+    "role": "customer",
+    "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200",
+    "location": "Andhra & Telangana Agri Region",
+    "created_at": "2026-10-02T10:36:49.115Z",
+    "preferred_language": "en"
+  },
+  {
+    "id": "usr_1791027732603_f6ebd1",
+    "auth_method": "phone",
+    "email": "testuser1791027732510@example.com",
+    "full_name": "Test User",
+    "fullName": "Test User",
+    "name": "Test User",
+    "role": "customer",
+    "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200",
+    "location": "Andhra & Telangana Agri Region",
+    "created_at": "2026-10-03T11:42:12.603Z",
+    "preferred_language": "en"
+  },
+  {
+    "id": "usr_1791027739347_8b2913",
+    "auth_method": "phone",
+    "email": "testuser1791027739250@example.com",
+    "full_name": "Test User",
+    "fullName": "Test User",
+    "name": "Test User",
+    "role": "customer",
+    "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200",
+    "location": "Andhra & Telangana Agri Region",
+    "created_at": "2026-10-03T11:42:19.348Z",
+    "preferred_language": "en"
+  },
+  {
+    "id": "usr_1791027784521_31542d",
+    "auth_method": "phone",
+    "email": "user_1791027784517@test.com",
+    "full_name": "Asha Sharma",
+    "fullName": "Asha Sharma",
+    "name": "Asha Sharma",
+    "role": "customer",
+    "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200",
+    "location": "Andhra & Telangana Agri Region",
+    "created_at": "2026-10-03T11:43:04.521Z",
+    "preferred_language": "en"
+  },
+  {
+    "id": "usr_1791027821786_2addc2",
+    "auth_method": "phone",
+    "phone_number": "+919876512345",
+    "full_name": "Phone User",
+    "fullName": "Phone User",
+    "name": "Phone User",
+    "role": "customer",
+    "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200",
+    "location": "Andhra & Telangana Region",
+    "created_at": "2026-10-03T11:43:41.786Z",
+    "preferred_language": "en"
+  },
+  {
+    "id": "usr_1791027956608_db33c2",
+    "auth_method": "phone",
+    "email": "newfarmer_1791027956517@farm2home.org",
+    "full_name": "Balaram Naidu",
+    "fullName": "Balaram Naidu",
+    "name": "Balaram Naidu",
+    "role": "farmer",
+    "avatar_url": "https://images.unsplash.com/photo-1595273670150-bd0c3c392e46?auto=format&fit=crop&q=80&w=200",
+    "location": "Guntur, Andhra Pradesh",
+    "created_at": "2026-10-03T11:45:56.608Z",
+    "preferred_language": "te",
+    "farm_name": "Naidu Natural Farms",
+    "certificate_url": null,
+    "approved": true
+  },
+  {
+    "id": "usr_1791027956866_4e5c5e",
+    "auth_method": "phone",
+    "phone_number": "+919900112233",
+    "full_name": "Lakshmi Narayana",
+    "fullName": "Lakshmi Narayana",
+    "name": "Lakshmi Narayana",
+    "role": "delivery",
+    "avatar_url": "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&q=80&w=200",
+    "location": "Hyderabad Metro Zone",
+    "created_at": "2026-10-03T11:45:56.866Z",
+    "preferred_language": "te"
+  },
+  {
+    "id": "usr_1791028006666_298aed",
+    "auth_method": "phone",
+    "email": "verified_farmer_1791028006577@farm2home.org",
+    "full_name": "Srinivasa Rao",
+    "fullName": "Srinivasa Rao",
+    "name": "Srinivasa Rao",
+    "role": "farmer",
+    "avatar_url": "https://images.unsplash.com/photo-1595273670150-bd0c3c392e46?auto=format&fit=crop&q=80&w=200",
+    "location": "Krishna, Andhra Pradesh",
+    "created_at": "2026-10-03T11:46:46.666Z",
+    "preferred_language": "te",
+    "farm_name": "Krishna Valley Organic Farms",
+    "certificate_url": null,
+    "approved": true
+  },
+  {
+    "id": "usr_1791028006900_d3a7c5",
+    "auth_method": "phone",
+    "phone_number": "+919887766554",
+    "full_name": "Venkatesh Kumar",
+    "fullName": "Venkatesh Kumar",
+    "name": "Venkatesh Kumar",
+    "role": "customer",
+    "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200",
+    "location": "Andhra & Telangana Region",
+    "created_at": "2026-10-03T11:46:46.900Z",
+    "preferred_language": "en"
+  },
+  {
+    "id": "usr_1791028294532_2865d9",
+    "auth_method": "phone",
+    "email": "user_1791028294438@farm2home.org",
+    "full_name": "Anita Reddy",
+    "fullName": "Anita Reddy",
+    "name": "Anita Reddy",
+    "role": "customer",
+    "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200",
+    "location": "Andhra & Telangana Agri Region",
+    "created_at": "2026-10-03T11:51:34.532Z",
+    "preferred_language": "te"
+  },
+  {
+    "id": "usr_1791028294629_5cc397",
+    "auth_method": "phone",
+    "phone_number": "+919123498765",
+    "full_name": "Agri Member (8765)",
+    "fullName": "Agri Member (8765)",
+    "name": "Agri Member (8765)",
+    "role": "customer",
+    "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200",
+    "location": "Andhra & Telangana Region",
+    "created_at": "2026-10-03T11:51:34.629Z",
+    "preferred_language": "en"
+  },
+  {
+    "id": "usr_1791028586833_ff8d12",
+    "auth_method": "phone",
+    "email": "testuser_1791028586827@farm2home.org",
+    "full_name": "Anita Sharma",
+    "fullName": "Anita Sharma",
+    "name": "Anita Sharma",
+    "role": "customer",
+    "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200",
+    "location": "Pune, Maharashtra",
+    "created_at": "2026-10-03T11:56:26.833Z",
+    "preferred_language": "hi"
+  },
+  {
+    "id": "usr_1791028586983_192bce",
+    "auth_method": "phone",
+    "phone_number": "+919876543210",
+    "full_name": "Kiran Patel",
+    "fullName": "Kiran Patel",
+    "name": "Kiran Patel",
+    "role": "farmer",
+    "avatar_url": "https://images.unsplash.com/photo-1595273670150-bd0c3c392e46?auto=format&fit=crop&q=80&w=200",
+    "location": "Andhra & Telangana Region",
+    "created_at": "2026-10-03T11:56:26.983Z",
+    "preferred_language": "en",
+    "farm_name": "Organic Farm",
+    "certificate_url": null,
+    "approved": true
+  }
+];
+
+export const DEVELOPMENT_PRODUCTS: Product[] = [
+  {
+    "id": "prod_107",
+    "farmer_id": "usr_ramesh_farmer",
+    "farmer_name": "Ramesh Kumar (Green Earth Organic Acres)",
+    "farmer_location": "Medak, Telangana",
+    "title": "Raw Farm A2 Cow Milk",
+    "description": "Chilled raw unprocessed A2 milk from free-roaming Desi Gir cows. Delivered in glass bottles within 4 hours of milking.",
+    "category": "Dairy & Poultry",
+    "price": 75,
+    "unit": "liter",
+    "stock": 40,
+    "is_organic": true,
+    "image_url": "https://images.unsplash.com/photo-1563636619-e9143da7973b?auto=format&fit=crop&q=80&w=800",
+    "created_at": "2026-09-30T11:32:53.709Z"
+  },
+  {
+    "id": "prod_102",
+    "farmer_id": "usr_ramesh_farmer",
+    "farmer_name": "Ramesh Kumar (Green Earth Organic Acres)",
+    "farmer_location": "Medak, Telangana",
+    "title": "Farm Fresh Palak (Spinach) Bunch",
+    "description": "Crisp, tender organic spinach leaves rich in iron and vitamins. Harvested fresh on order.",
+    "category": "Vegetables",
+    "price": 25,
+    "unit": "bunch",
+    "stock": 65,
+    "is_organic": true,
+    "image_url": "https://images.unsplash.com/photo-1576045057995-568f588f82fb?auto=format&fit=crop&q=80&w=800",
+    "created_at": "2026-09-27T11:32:53.709Z"
+  },
+  {
+    "id": "prod_101",
+    "farmer_id": "usr_ramesh_farmer",
+    "farmer_name": "Ramesh Kumar (Green Earth Organic Acres)",
+    "farmer_location": "Medak, Telangana",
+    "title": "Vine-Ripened Organic Tomatoes",
+    "description": "Naturally grown, pesticide-free red juicy tomatoes harvested every morning. Packed with antioxidants and lycopene.",
+    "category": "Vegetables",
+    "price": 42,
+    "unit": "kg",
+    "stock": 120,
+    "is_organic": true,
+    "image_url": "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&q=80&w=800",
+    "created_at": "2026-09-26T11:32:53.709Z"
+  },
+  {
+    "id": "prod_104",
+    "farmer_id": "usr_saraswathi_farmer",
+    "farmer_name": "Saraswathi Devi (Sunrise Natural Orchards)",
+    "farmer_location": "Chittoor, Andhra Pradesh",
+    "title": "Fresh Sweet Papaya",
+    "description": "Rich sweet orange papaya packed with papain digestive enzymes. Organically grown.",
+    "category": "Fruits",
+    "price": 45,
+    "unit": "piece",
+    "stock": 80,
+    "is_organic": true,
+    "image_url": "https://images.unsplash.com/photo-1617112848923-cc2234396a8d?auto=format&fit=crop&q=80&w=800",
+    "created_at": "2026-09-25T11:32:53.709Z"
+  },
+  {
+    "id": "prod_103",
+    "farmer_id": "usr_saraswathi_farmer",
+    "farmer_name": "Saraswathi Devi (Sunrise Natural Orchards)",
+    "farmer_location": "Chittoor, Andhra Pradesh",
+    "title": "Premium Banganapalli Mangoes",
+    "description": "Naturally tree-ripened sweet golden Banganapalli mangoes directly from Chittoor orchards.",
+    "category": "Fruits",
+    "price": 130,
+    "unit": "kg",
+    "stock": 250,
+    "is_organic": true,
+    "image_url": "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=800",
+    "created_at": "2026-09-23T11:32:53.709Z"
+  },
+  {
+    "id": "prod_106",
+    "farmer_id": "usr_anil_farmer",
+    "farmer_name": "Anil Reddy (Krishna Delta Pulses & Grains)",
+    "farmer_location": "Vijayawada, Andhra Pradesh",
+    "title": "Unpolished Toor Dal (Pigeon Pea)",
+    "description": "Pure chemical-free unpolished Toor Dal retaining natural fiber, protein, and authentic taste.",
+    "category": "Pulses & Spices",
+    "price": 145,
+    "unit": "kg",
+    "stock": 300,
+    "is_organic": true,
+    "image_url": "https://images.unsplash.com/photo-1585994191611-726c88883652?auto=format&fit=crop&q=80&w=800",
+    "created_at": "2026-09-21T11:32:53.709Z"
+  },
+  {
+    "id": "prod_105",
+    "farmer_id": "usr_anil_farmer",
+    "farmer_name": "Anil Reddy (Krishna Delta Pulses & Grains)",
+    "farmer_location": "Vijayawada, Andhra Pradesh",
+    "title": "Aromatic Sona Masoori Rice (Aged)",
+    "description": "Single origin 12-month aged Sona Masoori raw rice. Lightweight, fragrant, and fluffy when cooked.",
+    "category": "Grains & Cereals",
+    "price": 68,
+    "unit": "kg",
+    "stock": 500,
+    "is_organic": false,
+    "image_url": "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&q=80&w=800",
+    "created_at": "2026-09-19T11:32:53.709Z"
+  },
+  {
+    "id": "prod_108",
+    "farmer_id": "usr_ramesh_farmer",
+    "farmer_name": "Ramesh Kumar (Green Earth Organic Acres)",
+    "farmer_location": "Medak, Telangana",
+    "title": "Hand-Pounded Stone Curcuma Turmeric Powder",
+    "description": "High curcumin (5%+) pure stone-ground turmeric powder with rich golden hue and essential oils intact.",
+    "category": "Organic Special",
+    "price": 180,
+    "unit": "gram",
+    "stock": 90,
+    "is_organic": true,
+    "image_url": "https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&q=80&w=800",
+    "created_at": "2026-09-16T11:32:53.709Z"
+  }
+];
+
+export const DEVELOPMENT_ORDERS: Order[] = [
+  {
+    "id": "ord_9001",
+    "customer_id": "usr_rahul_customer",
+    "customer_name": "Rahul Verma",
+    "customer_phone": "+91 99887 76655",
+    "farmer_id": "usr_ramesh_farmer",
+    "farmer_name": "Ramesh Kumar (Green Earth)",
+    "farmer_phone": "+91 98765 43210",
+    "delivery_partner_id": "usr_vikram_delivery",
+    "delivery_partner_name": "Vikram Singh",
+    "items": [
+      {
+        "product_id": "prod_101",
+        "title": "Vine-Ripened Organic Tomatoes",
+        "price": 42,
+        "quantity": 3,
+        "unit": "kg",
+        "image_url": "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&q=80&w=800"
+      },
+      {
+        "product_id": "prod_102",
+        "title": "Farm Fresh Palak Bunch",
+        "price": 25,
+        "quantity": 2,
+        "unit": "bunch",
+        "image_url": "https://images.unsplash.com/photo-1576045057995-568f588f82fb?auto=format&fit=crop&q=80&w=800"
+      }
+    ],
+    "total_amount": 176,
+    "status": "out_for_delivery",
+    "delivery_address": "Flat 402, Green Valley Apts, Hitech City, Hyderabad - 500081",
+    "otp_code": "482910",
+    "created_at": "2026-10-01T09:32:53.709Z",
+    "completed_at": null,
+    "delivery_fare": 140
+  },
+  {
+    "id": "ord_9002",
+    "customer_id": "usr_rahul_customer",
+    "customer_name": "Rahul Verma",
+    "customer_phone": "+91 99887 76655",
+    "farmer_id": "usr_saraswathi_farmer",
+    "farmer_name": "Saraswathi Devi",
+    "farmer_phone": "+91 91234 56789",
+    "delivery_partner_id": "usr_vikram_delivery",
+    "delivery_partner_name": "Vikram Singh",
+    "items": [
+      {
+        "product_id": "prod_103",
+        "title": "Premium Banganapalli Mangoes",
+        "price": 130,
+        "quantity": 5,
+        "unit": "kg",
+        "image_url": "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=800"
+      }
+    ],
+    "total_amount": 650,
+    "status": "accepted",
+    "delivery_address": "Flat 402, Green Valley Apts, Hitech City",
+    "otp_code": "591204",
+    "created_at": "2026-10-01T07:32:53.709Z",
+    "completed_at": null,
+    "delivery_fare": 160
+  },
+  {
+    "id": "ord_9003",
+    "customer_id": "usr_rahul_customer",
+    "customer_name": "Rahul Verma",
+    "customer_phone": "+91 99887 76655",
+    "farmer_id": "usr_ramesh_farmer",
+    "farmer_name": "Ramesh Kumar (Green Earth)",
+    "farmer_phone": "+91 98765 43210",
+    "delivery_partner_id": "usr_vikram_delivery",
+    "delivery_partner_name": "Vikram Singh",
+    "items": [
+      {
+        "product_id": "prod_101",
+        "title": "Vine-Ripened Organic Tomatoes",
+        "price": 42,
+        "quantity": 2,
+        "unit": "kg",
+        "image_url": "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&q=80&w=800"
+      }
+    ],
+    "total_amount": 100,
+    "status": "delivered",
+    "delivery_address": "Villa 12, Palm Meadows, Jubilee Hills",
+    "otp_code": "847291",
+    "created_at": "2026-09-29T10:32:53.709Z",
+    "completed_at": "2026-09-29T11:32:53.709Z",
+    "delivery_fare": 160
+  },
+  {
+    "id": "ord_9004",
+    "customer_id": "usr_rahul_customer",
+    "customer_name": "Ananya Sharma",
+    "customer_phone": "+91 98112 23344",
+    "farmer_id": "usr_saraswathi_farmer",
+    "farmer_name": "Saraswathi Devi",
+    "farmer_phone": "+91 91234 56789",
+    "delivery_partner_id": "usr_vikram_delivery",
+    "delivery_partner_name": "Vikram Singh",
+    "items": [
+      {
+        "product_id": "prod_103",
+        "title": "Premium Banganapalli Mangoes",
+        "price": 130,
+        "quantity": 6,
+        "unit": "kg",
+        "image_url": "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=800"
+      }
+    ],
+    "total_amount": 780,
+    "status": "delivered",
+    "delivery_address": "B-304, Cyber Heights, Madhapur, Hyderabad - 500081",
+    "otp_code": "319842",
+    "created_at": "2026-09-22T11:32:53.709Z",
+    "completed_at": "2026-09-22T12:27:53.709Z",
+    "delivery_fare": 220
+  },
+  {
+    "id": "ord_9005",
+    "customer_id": "usr_rahul_customer",
+    "customer_name": "Praveen Reddy",
+    "customer_phone": "+91 96622 33445",
+    "farmer_id": "usr_ramesh_farmer",
+    "farmer_name": "Ramesh Kumar (Green Earth)",
+    "farmer_phone": "+91 98765 43210",
+    "delivery_partner_id": "usr_vikram_delivery",
+    "delivery_partner_name": "Vikram Singh",
+    "items": [
+      {
+        "product_id": "prod_101",
+        "title": "Vine-Ripened Organic Tomatoes",
+        "price": 42,
+        "quantity": 5,
+        "unit": "kg",
+        "image_url": "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&q=80&w=800"
+      }
+    ],
+    "total_amount": 210,
+    "status": "delivered",
+    "delivery_address": "Plot 88, Road 10, Banjara Hills, Hyderabad - 500034",
+    "otp_code": "625184",
+    "created_at": "2026-09-09T11:32:53.709Z",
+    "completed_at": "2026-09-09T12:12:53.709Z",
+    "delivery_fare": 175
+  }
+];
+
+export const DEVELOPMENT_REVIEWS: Review[] = [
+  {
+    "id": "rev_1",
+    "order_id": "ord_9002",
+    "customer_id": "usr_rahul_customer",
+    "customer_name": "Rahul Verma",
+    "farmer_id": "usr_saraswathi_farmer",
+    "rating": 5,
+    "comment": "Super sweet mangoes! Delivered straight from Chittoor orchard.",
+    "created_at": "2026-09-30T15:32:53.709Z"
+  }
+];
+
+export const DEVELOPMENT_CARTS: CartItem[] = [];
+
+export const DEVELOPMENT_FIXTURES = {
+  profiles: DEVELOPMENT_PROFILES,
+  products: DEVELOPMENT_PRODUCTS,
+  orders: DEVELOPMENT_ORDERS,
+  reviews: DEVELOPMENT_REVIEWS,
+  carts: DEVELOPMENT_CARTS,
+};

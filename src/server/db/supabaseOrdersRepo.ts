@@ -4,8 +4,7 @@ import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient.js';
 import { CatalogRepository, ALLOWED_DEV_FARMERS } from './catalogRepository.js';
 import { supabaseCartsRepo } from './supabaseCartsRepo.js';
 import { isValidQuantityForUnit, formatQuantity } from '../../lib/quantity.js';
-import fs from 'fs';
-import path from 'path';
+import { DEVELOPMENT_ORDERS } from './developmentFixtures.js';
 
 // In-memory concurrency locks per product ID to prevent race conditions
 const productInventoryLocks: Map<string, Promise<void>> = new Map();
@@ -34,24 +33,12 @@ async function acquireProductLock(productId: string): Promise<() => void> {
 // Development personas list
 const DEV_PERSONAS = ['usr_rahul_customer', 'usr_ramesh_farmer', 'usr_saraswathi_farmer', 'usr_vikram_delivery'];
 
-// Isolated runtime store for development orders (initialized from JSON reference, does not mutate JSON)
+// Isolated runtime store for development orders (initialized from typed TypeScript constants)
 let devOrdersCache: Order[] | null = null;
 
 function loadInitialDevOrders(): Order[] {
   if (devOrdersCache) return devOrdersCache;
-  try {
-    const jsonPath = path.join(process.cwd(), 'data', 'farm2home.json');
-    if (fs.existsSync(jsonPath)) {
-      const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-      if (Array.isArray(data.orders)) {
-        devOrdersCache = JSON.parse(JSON.stringify(data.orders));
-        return devOrdersCache!;
-      }
-    }
-  } catch (err) {
-    console.warn('[SupabaseOrders] Failed to load legacy dev orders from JSON:', err);
-  }
-  devOrdersCache = [];
+  devOrdersCache = JSON.parse(JSON.stringify(DEVELOPMENT_ORDERS));
   return devOrdersCache;
 }
 

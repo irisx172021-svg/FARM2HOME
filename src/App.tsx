@@ -54,6 +54,7 @@ export const AppContent: React.FC = () => {
   const [isAiOpen, setIsAiOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'auth' | 'onboarding' | 'account'>('auth');
+  const [isGuestMarketplace, setIsGuestMarketplace] = useState(false);
   const [activeCustomerTab, setActiveCustomerTab] = useState<'shop' | 'orders' | 'wishlist'>('shop');
   const [activeFarmerTab, setActiveFarmerTab] = useState<string>('overview');
   const [activeDeliveryTab, setActiveDeliveryTab] = useState<string>('history');
@@ -152,6 +153,7 @@ export const AppContent: React.FC = () => {
       api.setAuthToken(tokenOrUser);
     }
     localStorage.removeItem('f2h_logged_out');
+    setIsGuestMarketplace(false);
     setCurrentProfile(profile);
     setAuthStatus('AUTHENTICATED');
     setIsAuthModalOpen(false);
@@ -195,7 +197,11 @@ export const AppContent: React.FC = () => {
 
   // Cart operations
   const handleAddToCart = async (product: Product) => {
-    if (!currentProfile) return;
+    if (!currentProfile || authStatus !== 'AUTHENTICATED' || currentProfile.id === 'guest_customer') {
+      setAuthModalMode('auth');
+      setIsAuthModalOpen(true);
+      return;
+    }
     try {
       await api.addToCart(currentProfile.id, product.id, 1);
       const res = await api.getCart(currentProfile.id);
@@ -243,7 +249,11 @@ export const AppContent: React.FC = () => {
   };
 
   const handleToggleWishlist = async (productId: string) => {
-    if (!currentProfile) return;
+    if (!currentProfile || authStatus !== 'AUTHENTICATED' || currentProfile.id === 'guest_customer') {
+      setAuthModalMode('auth');
+      setIsAuthModalOpen(true);
+      return;
+    }
     try {
       await api.toggleWishlist(currentProfile.id, productId);
       const res = await api.getWishlist(currentProfile.id);
@@ -307,7 +317,7 @@ export const AppContent: React.FC = () => {
   }
 
   // 2. Unauthenticated Visitors Experience (Premium Full-Screen Agri-Tech Landing)
-  if (authStatus === 'UNAUTHENTICATED') {
+  if (authStatus === 'UNAUTHENTICATED' && !isGuestMarketplace) {
     return (
       <div className="min-h-screen bg-[#09090b] text-white">
         <AuthLandingPage
@@ -315,6 +325,11 @@ export const AppContent: React.FC = () => {
           onSelectLanguage={setLanguage}
           onAuthSuccess={handleAuthSuccess}
           availableProducts={products}
+          onExploreMarketplace={() => setIsGuestMarketplace(true)}
+          onOpenAuthModal={(mode) => {
+            setAuthModalMode(mode || 'auth');
+            setIsAuthModalOpen(true);
+          }}
         />
         {/* Multipurpose Multi-Provider Auth Modal if triggered */}
         <AuthModal
@@ -329,12 +344,53 @@ export const AppContent: React.FC = () => {
     );
   }
 
+  const guestCustomerProfile: Profile = {
+    id: 'guest_customer',
+    full_name: 'Guest Explorer',
+    role: 'customer',
+    auth_method: 'phone',
+    location: 'Hyderabad Metro Zone',
+    preferred_language: language,
+    created_at: new Date().toISOString(),
+  };
+
+  const activeProfile = currentProfile || (isGuestMarketplace ? guestCustomerProfile : null);
+
   return (
     <div className="min-h-screen flex flex-col bg-[#09090b] text-white selection:bg-emerald-500/30 selection:text-emerald-300 relative overflow-x-hidden">
       {/* Ambient background glows for depth without distracting */}
       <div className="pointer-events-none fixed -top-40 left-1/4 w-[650px] h-[650px] bg-emerald-500/[0.035] blur-[150px] rounded-full -z-10" />
       <div className="pointer-events-none fixed top-1/3 -right-24 w-[550px] h-[550px] bg-teal-500/[0.025] blur-[140px] rounded-full -z-10" />
       <div className="pointer-events-none fixed -bottom-40 left-1/3 w-[500px] h-[500px] bg-emerald-600/[0.02] blur-[130px] rounded-full -z-10" />
+
+      {/* Guest Marketplace Preview Banner */}
+      {isGuestMarketplace && authStatus === 'UNAUTHENTICATED' && (
+        <div className="bg-[#121620] border-b border-emerald-500/25 px-4 py-2.5 text-xs text-zinc-300 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-50 shadow-md">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-semibold text-white">Guest Marketplace Preview</span>
+            <span className="text-zinc-600 hidden sm:inline">·</span>
+            <span className="text-zinc-400 hidden sm:inline">Browsing live harvest inventory directly from producers</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setAuthModalMode('auth');
+                setIsAuthModalOpen(true);
+              }}
+              className="px-3 py-1 bg-emerald-400 hover:bg-emerald-300 text-zinc-950 font-bold text-xs rounded-lg cursor-pointer transition-colors"
+            >
+              Sign In to Order
+            </button>
+            <button
+              onClick={() => setIsGuestMarketplace(false)}
+              className="text-zinc-400 hover:text-white cursor-pointer transition-colors"
+            >
+              ← Back to Overview
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Toast Notification */}
       {toastMessage && (
@@ -413,12 +469,12 @@ export const AppContent: React.FC = () => {
 
       {/* Main Content Area based on User Role & Auth Status */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Authenticated Role Views */}
-        {authStatus === 'AUTHENTICATED' && currentProfile && (
+        {/* Authenticated Role Views or Guest Marketplace */}
+        {((authStatus === 'AUTHENTICATED' && currentProfile) || (isGuestMarketplace && activeProfile)) && (
           <>
-            {currentProfile.role === 'customer' && (
+            {activeProfile.role === 'customer' && (
               <CustomerView
-                currentProfile={currentProfile}
+                currentProfile={activeProfile}
                 language={language}
                 activeTab={activeCustomerTab}
                 products={products}

@@ -1,8 +1,7 @@
 import { Product } from '../../types.js';
 import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient.js';
 import { supabaseProductsRepo } from './supabaseProductsRepo.js';
-import fs from 'fs';
-import path from 'path';
+import { DEVELOPMENT_PRODUCTS } from './developmentFixtures.js';
 
 export const ALLOWED_DEV_FARMERS = ['usr_ramesh_farmer', 'usr_saraswathi_farmer', 'usr_anil_farmer'];
 
@@ -22,7 +21,7 @@ export interface SeedResult {
   error?: string;
 }
 
-// In-memory runtime overlay for development fixtures to preserve farm2home.json checksum
+// In-memory runtime overlay for development fixtures
 const devProductOverlay: Map<string, Partial<Product>> = new Map();
 const devInventoryOverlay: Map<string, number> = new Map();
 const devDeletedProductIds: Set<string> = new Set();
@@ -33,30 +32,22 @@ const devDeletedProductIds: Set<string> = new Set();
  */
 export const CatalogRepository = {
   /**
-   * Helper to load canonical development fixture products from JSON reference (read-only reference)
+   * Helper to load canonical development fixture products from typed TypeScript constants
    */
   getDevelopmentFixtureProducts(): Product[] {
-    try {
-      const jsonPath = path.join(process.cwd(), 'data', 'farm2home.json');
-      if (!fs.existsSync(jsonPath)) return [];
-      const db = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-      const rawProducts: Product[] = Array.isArray(db.products) ? db.products : [];
+    const rawProducts: Product[] = DEVELOPMENT_PRODUCTS;
 
-      return rawProducts
-        .filter((p) => !devDeletedProductIds.has(p.id))
-        .map((p) => {
-          const overrides = devProductOverlay.get(p.id);
-          const stockOverride = devInventoryOverlay.get(p.id);
-          return {
-            ...p,
-            ...(overrides || {}),
-            stock: stockOverride !== undefined ? stockOverride : (overrides?.stock ?? p.stock),
-          };
-        });
-    } catch (err) {
-      console.warn('[CatalogRepository] Failed to read fixture JSON:', err);
-      return [];
-    }
+    return rawProducts
+      .filter((p) => !devDeletedProductIds.has(p.id))
+      .map((p) => {
+        const overrides = devProductOverlay.get(p.id);
+        const stockOverride = devInventoryOverlay.get(p.id);
+        return {
+          ...p,
+          ...(overrides || {}),
+          stock: stockOverride !== undefined ? stockOverride : (overrides?.stock ?? p.stock),
+        };
+      });
   },
 
   /**

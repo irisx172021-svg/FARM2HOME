@@ -17,7 +17,7 @@ export interface SupabaseCartItemRow {
   quantity: number;
 }
 
-// Development fixture cart store (isolated in-memory to preserve farm2home.json checksum)
+// Development fixture cart store (isolated in-memory store)
 const devCartStore: Map<string, CartItem[]> = new Map();
 
 export const supabaseCartsRepo = {

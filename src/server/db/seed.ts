@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import { getDatabase } from './connection.js';
 import { usersRepo } from './repositories/usersRepo.js';
 import { authIdentitiesRepo } from './repositories/authIdentitiesRepo.js';
@@ -7,18 +5,13 @@ import { profilesRepo } from './repositories/profilesRepo.js';
 import { productsRepo } from './repositories/productsRepo.js';
 import { ordersRepo } from './repositories/ordersRepo.js';
 import { reviewsRepo } from './repositories/reviewsRepo.js';
+import { DEVELOPMENT_FIXTURES } from './developmentFixtures.js';
 
 export function seedDatabase(): void {
   const db = getDatabase();
-  const jsonPath = path.join(process.cwd(), 'data', 'farm2home.json');
-
-  if (!fs.existsSync(jsonPath)) {
-    return;
-  }
 
   try {
-    const raw = fs.readFileSync(jsonPath, 'utf-8');
-    const data = JSON.parse(raw);
+    const data = DEVELOPMENT_FIXTURES;
 
     // 1. Seed Users and Profiles
     if (Array.isArray(data.profiles)) {

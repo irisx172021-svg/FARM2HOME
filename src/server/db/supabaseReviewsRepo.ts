@@ -1,32 +1,19 @@
 import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
 import { Review, UserRole } from '../../types.js';
 import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient.js';
 import { CatalogRepository } from './catalogRepository.js';
 import { supabaseOrdersRepo } from './supabaseOrdersRepo.js';
+import { DEVELOPMENT_REVIEWS } from './developmentFixtures.js';
 
 // Development personas list
 const DEV_PERSONAS = ['usr_rahul_customer', 'usr_ramesh_farmer', 'usr_saraswathi_farmer', 'usr_vikram_delivery'];
 
-// Isolated in-memory store for development fixture reviews (does not mutate farm2home.json)
+// Isolated in-memory store for development fixture reviews
 let devReviewsCache: Review[] | null = null;
 
 function loadInitialDevReviews(): Review[] {
   if (devReviewsCache) return devReviewsCache;
-  try {
-    const jsonPath = path.join(process.cwd(), 'data', 'farm2home.json');
-    if (fs.existsSync(jsonPath)) {
-      const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-      if (Array.isArray(data.reviews)) {
-        devReviewsCache = JSON.parse(JSON.stringify(data.reviews));
-        return devReviewsCache!;
-      }
-    }
-  } catch (err) {
-    console.warn('[SupabaseReviews] Failed to load legacy dev reviews from JSON:', err);
-  }
-  devReviewsCache = [];
+  devReviewsCache = JSON.parse(JSON.stringify(DEVELOPMENT_REVIEWS));
   return devReviewsCache;
 }
 

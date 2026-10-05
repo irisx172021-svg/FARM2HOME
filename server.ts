@@ -177,10 +177,6 @@ const ai = process.env.GEMINI_API_KEY
     })
   : null;
 
-// Database Persistence file path
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_FILE = path.join(DATA_DIR, 'farm2home.json');
-
 interface DBData {
   profiles: Profile[];
   products: Product[];
@@ -564,8 +560,7 @@ function getDB(): DBData {
 }
 
 function saveDB(db: DBData): void {
-  // data/farm2home.json is strictly preserved as an immutable development/rollback reference
-  // Runtime modifications are stored in Supabase and server-side memory
+  // Legacy saveDB no-op: Runtime modifications are stored in Supabase and server-side memory
   return;
 }
 

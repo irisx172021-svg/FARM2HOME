@@ -14,476 +14,430 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  Eye,
-  EyeOff,
   User,
   ShoppingBag,
   Sparkles,
   RefreshCw,
   X,
+  ChevronRight,
+  Menu,
+  Navigation,
+  Bot,
+  Layers,
+  Thermometer,
+  Clock,
+  Compass,
+  Cpu,
+  BadgeCheck,
+  TrendingUp,
+  MapPin,
+  Calendar,
+  CloudSun,
 } from 'lucide-react';
 import { Language, UserRole, Profile } from '../types.js';
-import { getTranslation, interpolate } from '../lib/translations.js';
+import { getTranslation } from '../lib/translations.js';
 import { api } from '../lib/api.js';
-import {
-  getGoogleClientId,
-  ensureGoogleIdentityInitialized,
-  renderGoogleSignInButton,
-  addGoogleCredentialListener,
-} from '../lib/googleIdentity.js';
+import { SplineHeroCanvas } from './SplineHeroCanvas.js';
+import { AuthModal } from './AuthModal.js';
 
 interface AuthLandingPageProps {
   language: Language;
   onSelectLanguage: (lang: Language) => void;
   onAuthSuccess: (profile: Profile, token: string) => void;
   availableProducts?: any[];
+  onExploreMarketplace?: () => void;
+  onOpenAuthModal?: (mode?: 'auth' | 'onboarding' | 'account') => void;
 }
-
-type AuthView = 'signin' | 'signup' | 'phone' | 'passkey';
 
 export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
   language,
   onSelectLanguage,
   onAuthSuccess,
+  availableProducts = [],
+  onExploreMarketplace,
+  onOpenAuthModal,
 }) => {
   const t = getTranslation(language);
 
-  // Active View State
-  const [view, setView] = useState<AuthView>('signin');
+  // Scroll tracking for navigation compactness
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Sign In & Sign Up Form States
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<UserRole>('customer');
+  // Internal Auth Modal state if parent does not provide onOpenAuthModal
+  const [internalAuthModalOpen, setInternalAuthModalOpen] = useState(false);
+  const [internalAuthMode, setInternalAuthMode] = useState<'auth' | 'onboarding' | 'account'>('auth');
+  const [initialRoleChoice, setInitialRoleChoice] = useState<'customer' | 'farmer' | 'delivery'>('customer');
 
-  // Phone OTP States
-  const [phone, setPhone] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [otpTicket, setOtpTicket] = useState('');
-  const [devOtpHint, setDevOtpHint] = useState<string | null>(null);
-  const [otpStep, setOtpStep] = useState<'request' | 'verify'>('request');
-  const [resendCooldown, setResendCooldown] = useState(0);
-
-  // Status & UI States
-  const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  // Interactive sections state
+  const [activeJourneyStep, setActiveJourneyStep] = useState(0);
   const [showDevPersonas, setShowDevPersonas] = useState(false);
+  const [loadingPersona, setLoadingPersona] = useState<string | null>(null);
 
-  // Google button DOM container reference
-  const googleBtnRef = useRef<HTMLDivElement>(null);
-
-  // Google Sign-In Credential Listener and Button Rendering
+  // Track scroll position
   useEffect(() => {
-    const unregister = addGoogleCredentialListener(async (response) => {
-      if (!response?.credential) return;
-      setLoading(true);
-      setErrorMessage(null);
-      setSuccessMessage(null);
-      try {
-        const res = await api.loginGoogle({
-          credential: response.credential,
-          role: selectedRole,
-        });
-        if (res.profile && res.sessionToken) {
-          onAuthSuccess(res.profile, res.sessionToken);
-        } else {
-          setErrorMessage('Failed to sign in with Google');
-        }
-      } catch (err: any) {
-        setErrorMessage(err.message || 'Google authentication failed');
-      } finally {
-        setLoading(false);
-      }
-    });
-
-    if (googleBtnRef.current) {
-      renderGoogleSignInButton(googleBtnRef.current, { theme: 'filled_black', width: 380 });
-    }
-
-    return () => {
-      unregister();
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 30);
     };
-  }, [selectedRole]);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
-  // Reset errors on view switch
-  const switchView = (nextView: AuthView) => {
-    setView(nextView);
-    setErrorMessage(null);
-    setSuccessMessage(null);
-    if (nextView === 'phone') {
-      setOtpStep('request');
-      setOtpCode('');
+  const openAuth = (mode: 'auth' | 'onboarding' | 'account' = 'auth', role: 'customer' | 'farmer' | 'delivery' = 'customer') => {
+    setInitialRoleChoice(role);
+    if (onOpenAuthModal) {
+      onOpenAuthModal(mode);
+    } else {
+      setInternalAuthMode(mode);
+      setInternalAuthModalOpen(true);
     }
   };
 
-  // Resend OTP countdown timer
-  useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const timer = setInterval(() => {
-      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [resendCooldown]);
-
-  // 1. Email & Password Sign In
-  const handleEmailSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
-    const cleanEmail = email.trim();
-    if (!cleanEmail || !password) {
-      setErrorMessage(t.auth.phoneRequiredError || 'Please enter both email and password.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await api.loginEmail({
-        email: cleanEmail,
-        password,
-      });
-      if (res.profile && res.sessionToken) {
-        onAuthSuccess(res.profile, res.sessionToken);
-      } else {
-        setErrorMessage(t.auth.invalidCredentials);
+  const handleExploreAction = () => {
+    if (onExploreMarketplace) {
+      onExploreMarketplace();
+    } else {
+      const el = document.getElementById('marketplace');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || t.auth.invalidCredentials);
-    } finally {
-      setLoading(false);
     }
   };
 
-  // 2. Email & Password Sign Up
-  const handleEmailSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
-    const cleanName = fullName.trim();
-    const cleanEmail = email.trim();
-
-    if (!cleanName) {
-      setErrorMessage('Please enter your full name.');
-      return;
-    }
-    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      setErrorMessage('Please enter a valid email address.');
-      return;
-    }
-    if (password.length < 6) {
-      setErrorMessage(t.auth.passwordMinLength);
-      return;
-    }
-    if (password !== confirmPassword) {
-      setErrorMessage(t.auth.passwordMismatch);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await api.registerEmail({
-        email: cleanEmail,
-        password,
-        fullName: cleanName,
-        role: selectedRole,
-        preferredLanguage: language,
-        location: selectedRole === 'farmer' ? 'Andhra & Telangana Agri Region' : 'Hyderabad Metro Zone',
-        farmName: selectedRole === 'farmer' ? 'Green Organic Acres' : undefined,
-      });
-
-      if (res.profile && res.sessionToken) {
-        onAuthSuccess(res.profile, res.sessionToken);
-      } else {
-        setErrorMessage('Failed to create account. Please try again.');
-      }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'An error occurred during account creation.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 3. Google Sign-In Fallback Handler
-  const handleGoogleSignInFallback = async () => {
-    setErrorMessage(null);
-    setSuccessMessage(null);
-    const clientId = getGoogleClientId();
-    if (!clientId) {
-      setErrorMessage(
-        'Google Sign-In is not configured. Missing VITE_GOOGLE_CLIENT_ID in environment variables. Please configure your Google OAuth 2.0 Web Client ID to enable Google authentication.'
-      );
-      return;
-    }
-    setLoading(true);
-    try {
-      const initialized = await ensureGoogleIdentityInitialized();
-      if (!initialized) {
-        setErrorMessage('Google Sign-In service is temporarily unavailable. Please retry.');
-        return;
-      }
-      if (googleBtnRef.current) {
-        await renderGoogleSignInButton(googleBtnRef.current, { theme: 'filled_black', width: 380 });
-      }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Google authentication failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 4. Phone OTP: Step 1 (Request OTP)
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length < 10) {
-      setErrorMessage(t.auth.validPhoneError);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await api.sendPhoneOtp(phone.trim());
-      setOtpTicket(res.ticket);
-      setDevOtpHint(res.devOtp || null);
-      setOtpStep('verify');
-      setResendCooldown(60);
-      setSuccessMessage(`${t.auth.weSentCode} +91 ${cleanPhone.slice(-10)}`);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to dispatch verification code');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 4. Phone OTP: Step 2 (Verify OTP)
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-
-    const cleanOtp = otpCode.trim();
-    if (!cleanOtp || cleanOtp.length !== 6) {
-      setErrorMessage(t.auth.invalidOtpError);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await api.verifyPhoneOtp({
-        phone: phone.trim(),
-        ticket: otpTicket,
-        otp: cleanOtp,
-        fullName: fullName.trim() || undefined,
-        role: selectedRole,
-        preferredLanguage: language,
-        location: 'Hyderabad Metro Zone',
-      });
-
-      if (res.profile && res.sessionToken) {
-        onAuthSuccess(res.profile, res.sessionToken);
-      } else {
-        setErrorMessage(t.auth.invalidOtpError);
-      }
-    } catch (err: any) {
-      const msg = err.message || '';
-      if (msg.includes('expired')) {
-        setErrorMessage(t.auth.otpExpired);
-      } else if (msg.includes('Too many') || msg.includes('rate')) {
-        setErrorMessage(t.auth.rateLimitedError);
-      } else {
-        setErrorMessage(t.auth.invalidOtpError);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 5. Passkey / WebAuthn
-  const handlePasskeyAuth = async () => {
-    setLoading(true);
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
-    try {
-      if (typeof window === 'undefined' || !window.PublicKeyCredential) {
-        setErrorMessage(
-          'Passkeys / WebAuthn are not supported by your current browser or device. Please sign in with Email & Password, Phone OTP, or a Test Persona.'
-        );
-        return;
-      }
-
-      const challengeRes = await api.getPasskeyChallenge();
-      const rawChallenge = Uint8Array.from(
-        atob(challengeRes.challenge.replace(/-/g, '+').replace(/_/g, '/')),
-        (c) => c.charCodeAt(0)
-      );
-
-      let assertion: any;
-      try {
-        assertion = await navigator.credentials.get({
-          publicKey: {
-            challenge: rawChallenge,
-            timeout: 60000,
-            userVerification: 'preferred',
-            rpId: window.location.hostname,
-          },
-        });
-      } catch (navErr: any) {
-        if (navErr.name === 'NotAllowedError') {
-          setErrorMessage('Passkey interaction was cancelled.');
-        } else {
-          setErrorMessage(
-            navErr.message ||
-              'No passkey found for Farm2Home on this device. Please sign in with Email or Phone first, then register your passkey in Account Settings.'
-          );
-        }
-        return;
-      }
-
-      if (!assertion) {
-        setErrorMessage('Passkey interaction was cancelled.');
-        return;
-      }
-
-      const loginRes = await api.loginPasskey({
-        challenge: challengeRes.challenge,
-        credential: { id: assertion.id },
-      });
-
-      if (loginRes.profile && loginRes.sessionToken) {
-        onAuthSuccess(loginRes.profile, loginRes.sessionToken);
-      } else {
-        setErrorMessage(t.auth.passkeyNotSupported);
-      }
-    } catch (err: any) {
-      setErrorMessage(
-        err.message?.includes('not recognized')
-          ? 'No registered account found for this passkey. Please sign up or sign in with email/phone first.'
-          : err.message || t.auth.passkeyNotSupported
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 6. Test Persona Quick Login
   const handlePersonaLogin = async (personaId: string) => {
-    setLoading(true);
-    setErrorMessage(null);
+    setLoadingPersona(personaId);
     try {
       const res = await api.devLogin(personaId);
       if (res.profile && res.sessionToken) {
         onAuthSuccess(res.profile, res.sessionToken);
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || t.common.somethingWentWrong);
+    } catch (err) {
+      console.error('Failed to log in with persona:', err);
     } finally {
-      setLoading(false);
+      setLoadingPersona(null);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#09090b] text-white flex flex-col justify-between selection:bg-emerald-500/30 selection:text-emerald-300 relative overflow-hidden font-sans">
-      {/* Background Architectural Lighting & Agri-Grid Texture */}
-      <div
-        className="pointer-events-none fixed inset-0 opacity-[0.035] -z-10"
-        style={{
-          backgroundImage: `radial-gradient(#10b981 1px, transparent 1px)`,
-          backgroundSize: '32px 32px',
-        }}
-      />
-      <div className="pointer-events-none fixed -top-32 left-1/4 w-[600px] h-[600px] bg-emerald-500/[0.03] blur-[150px] rounded-full -z-10" />
-      <div className="pointer-events-none fixed bottom-0 right-10 w-[500px] h-[500px] bg-teal-500/[0.025] blur-[140px] rounded-full -z-10" />
+  // Sample products for live preview if products are empty
+  const previewProducts = availableProducts.length > 0 ? availableProducts.slice(0, 4) : [
+    {
+      id: 'prod_banga_mango',
+      title: 'Banganapalli Mangoes',
+      category: 'fruits',
+      price: 140,
+      unit: 'kg',
+      stock: 45,
+      farmer_name: 'Saraswathi Devi',
+      farmer_location: 'Chittoor District',
+      is_organic: true,
+      image_url: 'https://images.unsplash.com/photo-1553279768-865429fa0078?w=500&auto=format&fit=crop&q=60',
+      description: 'Naturally ripened, export grade mangoes freshly plucked at dawn.',
+    },
+    {
+      id: 'prod_desi_tomato',
+      title: 'Organic Country Tomatoes',
+      category: 'vegetables',
+      price: 36,
+      unit: 'kg',
+      stock: 120,
+      farmer_name: 'Ramesh Reddy',
+      farmer_location: 'Rangareddy Cluster',
+      is_organic: true,
+      image_url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&auto=format&fit=crop&q=60',
+      description: 'Vine-ripened heritage country tomatoes with rich natural acidity.',
+    },
+    {
+      id: 'prod_sona_rice',
+      title: 'Aged Sona Masoori Rice',
+      category: 'grains',
+      price: 78,
+      unit: 'kg',
+      stock: 250,
+      farmer_name: 'Saraswathi Devi',
+      farmer_location: 'Nellore Basin',
+      is_organic: false,
+      image_url: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500&auto=format&fit=crop&q=60',
+      description: 'Traditional 12-month aged single-origin grain with light texture.',
+    },
+    {
+      id: 'prod_fresh_palak',
+      title: 'Hydro-Washed Organic Palak',
+      category: 'vegetables',
+      price: 25,
+      unit: 'bunch',
+      stock: 35,
+      farmer_name: 'Ramesh Reddy',
+      farmer_location: 'Medak Agri Zone',
+      is_organic: true,
+      image_url: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=500&auto=format&fit=crop&q=60',
+      description: 'Crisp green leaves harvested at 5:00 AM, zero chemical residues.',
+    },
+  ];
 
-      {/* TOP HEADER: Clean Navigation Bar */}
-      <header className="sticky top-0 z-30 bg-[#09090b]/85 border-b border-white/[0.06] backdrop-blur-xl px-4 sm:px-8 py-3.5">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
-          {/* Logo & Tagline */}
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.15)]">
+  const journeySteps = [
+    {
+      num: '01',
+      title: 'HARVEST',
+      desc: 'Farmers list fresh produce directly from their farms.',
+      tag: 'DAWN HARVEST',
+      detail: 'Registered farmers upload batch inventory with harvest timestamps, quality grade, and unit pricing directly from the field.',
+      icon: Sprout,
+    },
+    {
+      num: '02',
+      title: 'DISCOVER',
+      desc: 'Customers discover products with freshness, stock, farmer and organic information.',
+      tag: 'REAL-TIME CATALOG',
+      detail: 'Search regional harvest batches with complete grower provenance, real-time inventory counts, and organic certification badges.',
+      icon: Store,
+    },
+    {
+      num: '03',
+      title: 'CONNECT',
+      desc: 'Orders move through an intelligent fulfillment workflow.',
+      tag: 'SMART DISPATCH',
+      detail: 'Orders automatically allocate to hyper-local fulfillment nodes, minimizing transit duration and preserving peak produce nutrition.',
+      icon: Cpu,
+    },
+    {
+      num: '04',
+      title: 'DELIVER',
+      desc: 'Delivery partners handle verified handoffs and delivery tracking.',
+      tag: 'COLD-CHAIN ROUTE',
+      detail: 'Delivery fleet accepts optimized route manifests with real-time temperature tracking and verified 6-digit OTP handoff protocols.',
+      icon: Truck,
+    },
+    {
+      num: '05',
+      title: 'HOME',
+      desc: 'Fresh agricultural products reach the customer.',
+      tag: 'ZERO INTERMEDIARIES',
+      detail: 'Peak-fresh nutrition arrives at customer doorsteps within hours of picking, returning 100% of fair agricultural value to growers.',
+      icon: Home,
+    },
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#09090b] text-white selection:bg-emerald-500/30 selection:text-emerald-300 relative overflow-x-hidden font-sans">
+      {/* Background Architectural Ambient Glows */}
+      <div className="pointer-events-none fixed -top-40 left-1/4 w-[650px] h-[650px] bg-emerald-500/[0.035] blur-[160px] rounded-full -z-10" />
+      <div className="pointer-events-none fixed top-1/3 -right-24 w-[550px] h-[550px] bg-teal-500/[0.025] blur-[150px] rounded-full -z-10" />
+      <div className="pointer-events-none fixed -bottom-40 left-1/3 w-[500px] h-[500px] bg-emerald-600/[0.02] blur-[140px] rounded-full -z-10" />
+
+      {/* TOP NAVIGATION: Clean 3-zone Top Bar Contract */}
+      <header
+        className={`fixed top-0 left-0 right-0 z-40 transition-all duration-200 border-b ${
+          isScrolled
+            ? 'bg-[#09090b]/90 border-white/[0.08] backdrop-blur-xl py-3 shadow-2xl shadow-black/40'
+            : 'bg-transparent border-transparent py-4 sm:py-5'
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+          {/* Zone 1: Single Element Brand Wordmark */}
+          <a
+            href="/"
+            onClick={(e) => {
+              e.preventDefault();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="flex items-center gap-2.5 group"
+          >
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:border-emerald-500/60 transition-colors">
               <Sprout className="w-4 h-4 text-emerald-400" />
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-base font-black tracking-tight text-white flex items-center">
-                Farm<span className="text-emerald-400">2</span>Home
-              </span>
-              <span className="hidden sm:inline text-[11px] text-zinc-500 font-medium">
-                · {t.landing.headline}
-              </span>
-            </div>
-          </div>
+            <span className="text-base font-bold tracking-tight text-white flex items-center">
+              Farm<span className="text-emerald-400">2</span>Home
+            </span>
+          </a>
 
-          {/* Right Controls: Telemetry indicator & Language Selector */}
+          {/* Zone 2: Clean Text Navigation Links */}
+          <nav className="hidden md:flex items-center gap-7 text-xs font-medium text-zinc-400">
+            <a
+              href="#marketplace"
+              className="hover:text-white transition-colors"
+            >
+              Marketplace
+            </a>
+            <a
+              href="#how-it-works"
+              className="hover:text-white transition-colors"
+            >
+              How It Works
+            </a>
+            <a
+              href="#farmers"
+              className="hover:text-white transition-colors"
+            >
+              For Farmers
+            </a>
+            <a
+              href="#delivery"
+              className="hover:text-white transition-colors"
+            >
+              For Delivery
+            </a>
+            <a
+              href="#agronomist"
+              className="hover:text-white transition-colors flex items-center gap-1.5"
+            >
+              <Bot className="w-3.5 h-3.5 text-emerald-400" />
+              <span>AI Agronomist</span>
+            </a>
+          </nav>
+
+          {/* Zone 3: Primary Actions + Language Selector */}
           <div className="flex items-center gap-2.5 sm:gap-3">
-            {/* Live Network Status Indicator */}
-            <div className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white/[0.02] border border-white/[0.06] text-[11px] font-mono text-zinc-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-zinc-300">Live Agri Grid</span>
-              <span className="text-zinc-600">·</span>
-              <span className="text-zinc-500">0% Middleman</span>
-            </div>
-
             {/* Language Selector */}
             <div className="relative flex items-center">
               <Languages className="w-3.5 h-3.5 absolute left-2.5 text-zinc-400 pointer-events-none" />
               <select
                 value={language}
                 onChange={(e) => onSelectLanguage(e.target.value as Language)}
-                aria-label={t.header.selectLanguage}
-                className="pl-7 pr-3 py-1.5 bg-[#121418] hover:bg-[#181b20] border border-white/[0.08] focus:border-emerald-500/50 rounded-xl text-xs font-semibold text-zinc-200 focus:outline-none cursor-pointer transition-colors"
+                aria-label="Select interface language"
+                className="pl-7 pr-3 py-1.5 bg-[#121418] hover:bg-[#181b22] border border-white/[0.08] focus:border-emerald-500/50 rounded-lg text-xs font-semibold text-zinc-200 focus:outline-none cursor-pointer transition-colors"
               >
-                <option value="en" className="bg-[#09090b] text-white">English</option>
-                <option value="te" className="bg-[#09090b] text-white">తెలుగు (Telugu)</option>
-                <option value="hi" className="bg-[#09090b] text-white">हिन्दी (Hindi)</option>
-                <option value="ta" className="bg-[#09090b] text-white">தமிழ் (Tamil)</option>
+                <option value="en" className="bg-[#09090b] text-white">EN</option>
+                <option value="te" className="bg-[#09090b] text-white">తెలుగు</option>
+                <option value="hi" className="bg-[#09090b] text-white">हिन्दी</option>
+                <option value="ta" className="bg-[#09090b] text-white">தமிழ்</option>
               </select>
             </div>
 
-            {/* Developer Test Personas Toggle (Discreet, internal testing) */}
+            {/* Sandbox Tester Trigger */}
             <button
               onClick={() => setShowDevPersonas((prev) => !prev)}
               type="button"
-              className="px-2.5 py-1.5 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 rounded-xl text-[11px] font-mono text-zinc-400 hover:text-zinc-200 transition-all cursor-pointer flex items-center gap-1.5"
-              title="Development Testing Personas"
+              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 rounded-lg text-[11px] font-mono text-zinc-400 hover:text-white transition-all cursor-pointer"
+              title="Test development personas"
             >
-              <User className="w-3.5 h-3.5 text-emerald-400/80" />
-              <span className="hidden sm:inline">Sandbox</span>
+              <User className="w-3 h-3 text-emerald-400" />
+              <span>Sandbox</span>
+            </button>
+
+            {/* Sign In Button */}
+            <button
+              type="button"
+              onClick={() => openAuth('auth')}
+              className="px-3.5 py-1.5 text-xs font-semibold text-zinc-300 hover:text-white transition-colors cursor-pointer"
+            >
+              Sign In
+            </button>
+
+            {/* Get Started Button */}
+            <button
+              type="button"
+              onClick={() => openAuth('auth')}
+              className="px-3.5 py-1.5 text-xs font-semibold text-zinc-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg shadow-sm shadow-emerald-500/20 transition-all cursor-pointer whitespace-nowrap active:scale-[0.98]"
+            >
+              Get Started
+            </button>
+
+            {/* Mobile Hamburger Toggle */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              className="md:hidden p-1.5 text-zinc-400 hover:text-white rounded-lg focus:outline-none"
+              aria-label="Toggle Navigation"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
+
+        {/* Mobile Navigation Drawer */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="md:hidden bg-[#0e1117] border-b border-white/10 px-4 py-4 space-y-3"
+            >
+              <nav className="flex flex-col gap-2.5 text-sm font-medium text-zinc-300">
+                <a
+                  href="#marketplace"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-2 py-1.5 hover:text-white transition-colors"
+                >
+                  Marketplace
+                </a>
+                <a
+                  href="#how-it-works"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-2 py-1.5 hover:text-white transition-colors"
+                >
+                  How It Works
+                </a>
+                <a
+                  href="#farmers"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-2 py-1.5 hover:text-white transition-colors"
+                >
+                  For Farmers
+                </a>
+                <a
+                  href="#delivery"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-2 py-1.5 hover:text-white transition-colors"
+                >
+                  For Delivery
+                </a>
+                <a
+                  href="#agronomist"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-2 py-1.5 hover:text-white transition-colors"
+                >
+                  AI Agronomist
+                </a>
+              </nav>
+              <div className="pt-2 border-t border-white/10 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    openAuth('auth');
+                  }}
+                  className="flex-1 py-2 text-center text-xs font-semibold text-zinc-950 bg-emerald-400 rounded-lg"
+                >
+                  Sign In / Register
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setShowDevPersonas(true);
+                  }}
+                  className="px-3 py-2 text-center text-xs font-mono text-zinc-400 bg-white/5 border border-white/10 rounded-lg"
+                >
+                  Sandbox
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </header>
 
-      {/* Discreet Developer Sandbox Drawer */}
+      {/* Developer Sandbox Persona Drawer */}
       <AnimatePresence>
         {showDevPersonas && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="bg-[#10131a] border-b border-emerald-500/20 px-4 sm:px-8 py-3.5 z-20"
+            className="fixed top-16 left-0 right-0 z-30 bg-[#10131a] border-b border-emerald-500/20 px-4 sm:px-8 py-3.5 shadow-2xl"
           >
-            <div className="max-w-6xl mx-auto">
+            <div className="max-w-7xl mx-auto">
               <div className="flex items-center justify-between mb-2.5">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-emerald-400 font-mono">
-                    {t.auth.devSandboxTitle}
+                    DEVELOPMENT PERSONA SANDBOX
                   </span>
                   <span className="text-[10px] text-zinc-500">
-                    · {t.auth.devSandboxNote}
+                    · Instant isolated test sessions across roles
                   </span>
                 </div>
                 <button
                   onClick={() => setShowDevPersonas(false)}
-                  className="text-xs text-zinc-500 hover:text-white p-1"
+                  className="text-xs text-zinc-500 hover:text-white p-1 cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -493,46 +447,46 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
                 <button
                   type="button"
                   onClick={() => handlePersonaLogin('usr_rahul_customer')}
-                  disabled={loading}
+                  disabled={loadingPersona !== null}
                   className="p-2.5 bg-[#161a22] hover:bg-emerald-950/20 border border-white/10 hover:border-emerald-500/40 rounded-xl text-left transition-all cursor-pointer group"
                 >
                   <div className="flex items-center justify-between mb-0.5">
                     <span className="text-xs font-bold text-white group-hover:text-emerald-300">Rahul Verma</span>
                     <span className="text-[9px] font-mono text-emerald-400">Customer</span>
                   </div>
-                  <p className="text-[10px] text-zinc-500 truncate">Hitech City · Ready Cart</p>
+                  <p className="text-[10px] text-zinc-500 truncate">Hyderabad · Regular Consumer</p>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handlePersonaLogin('usr_ramesh_farmer')}
-                  disabled={loading}
+                  disabled={loadingPersona !== null}
                   className="p-2.5 bg-[#161a22] hover:bg-emerald-950/20 border border-white/10 hover:border-emerald-500/40 rounded-xl text-left transition-all cursor-pointer group"
                 >
                   <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-xs font-bold text-white group-hover:text-emerald-300">Ramesh Kumar</span>
+                    <span className="text-xs font-bold text-white group-hover:text-emerald-300">Ramesh Reddy</span>
                     <span className="text-[9px] font-mono text-emerald-400">Farmer</span>
                   </div>
-                  <p className="text-[10px] text-zinc-500 truncate">Medak · Organic Farm</p>
+                  <p className="text-[10px] text-zinc-500 truncate">Rangareddy · 12 Acres</p>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handlePersonaLogin('usr_saraswathi_farmer')}
-                  disabled={loading}
+                  disabled={loadingPersona !== null}
                   className="p-2.5 bg-[#161a22] hover:bg-emerald-950/20 border border-white/10 hover:border-emerald-500/40 rounded-xl text-left transition-all cursor-pointer group"
                 >
                   <div className="flex items-center justify-between mb-0.5">
                     <span className="text-xs font-bold text-white group-hover:text-emerald-300">Saraswathi Devi</span>
                     <span className="text-[9px] font-mono text-emerald-400">Farmer</span>
                   </div>
-                  <p className="text-[10px] text-zinc-500 truncate">Chittoor · Orchards</p>
+                  <p className="text-[10px] text-zinc-500 truncate">Chittoor · Mango Orchards</p>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handlePersonaLogin('usr_vikram_delivery')}
-                  disabled={loading}
+                  disabled={loadingPersona !== null}
                   className="p-2.5 bg-[#161a22] hover:bg-emerald-950/20 border border-white/10 hover:border-emerald-500/40 rounded-xl text-left transition-all cursor-pointer group"
                 >
                   <div className="flex items-center justify-between mb-0.5">
@@ -547,767 +501,860 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
         )}
       </AnimatePresence>
 
-      {/* MAIN TWO-COLUMN BALANCED DESKTOP EXPERIENCE */}
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-8 py-8 sm:py-12 flex items-center justify-center">
-        <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-          
-          {/* LEFT SIDE: Restrained Farm2Home Visual / Journey Area */}
-          <div className="lg:col-span-6 space-y-6">
-            <div className="space-y-3">
-              {/* Brand mark */}
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Direct Agricultural Infrastructure</span>
+      {/* 1. CINEMATIC FULL-SCREEN SPLINE HERO SECTION */}
+      <section className="relative min-h-[92vh] sm:min-h-screen flex items-center pt-24 pb-16 overflow-hidden">
+        {/* Interactive 3D Spline Canvas Backdrop */}
+        <div className="absolute inset-0 z-0 pointer-events-auto">
+          <SplineHeroCanvas />
+        </div>
+
+        {/* Ambient bottom fade into next section */}
+        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#09090b] to-transparent pointer-events-none z-10" />
+
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full pointer-events-none">
+          <div className="max-w-2xl space-y-7 pointer-events-auto">
+            {/* System Status Telemetry Indicator */}
+            <div className="inline-flex items-center gap-2.5 px-3 py-1 rounded-full bg-white/[0.03] border border-emerald-500/30 text-emerald-400 text-xs font-mono backdrop-blur-md shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="tracking-wide">FARM2HOME NETWORK • ONLINE</span>
+            </div>
+
+            {/* Primary Cinematic Headline */}
+            <div className="space-y-1">
+              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.08] text-balance">
+                From Farm.<br />
+                To Home.<br />
+                <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-200 bg-clip-text text-transparent">
+                  Intelligently.
+                </span>
+              </h1>
+            </div>
+
+            {/* Supporting Value Proposition */}
+            <p className="text-base sm:text-lg text-zinc-300 leading-relaxed max-w-xl text-balance">
+              Farm2Home connects farmers, customers, and delivery partners through one intelligent agricultural marketplace.
+            </p>
+
+            {/* Hero CTA Button Cluster */}
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              {/* Primary CTA: Explore Marketplace */}
+              <button
+                type="button"
+                onClick={handleExploreAction}
+                className="px-6 py-3.5 bg-emerald-400 hover:bg-emerald-300 text-zinc-950 font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/25 transition-all flex items-center gap-2 cursor-pointer active:scale-[0.98]"
+              >
+                <span>Explore Marketplace</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              {/* Secondary CTA: How It Works */}
+              <a
+                href="#how-it-works"
+                className="px-5 py-3.5 bg-[#141820]/90 hover:bg-[#1a202c] border border-white/10 hover:border-white/20 text-white font-semibold text-xs rounded-xl transition-all flex items-center gap-2 cursor-pointer backdrop-blur-md"
+              >
+                <span>How It Works</span>
+              </a>
+
+              {/* Authentication CTA: Sign In */}
+              <button
+                type="button"
+                onClick={() => openAuth('auth')}
+                className="px-5 py-3.5 text-zinc-300 hover:text-white font-semibold text-xs transition-colors cursor-pointer"
+              >
+                Sign In
+              </button>
+            </div>
+
+            {/* Hero Monospace Telemetry Pills */}
+            <div className="pt-6 border-t border-white/[0.08] flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-mono text-zinc-400">
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                FRESH HARVEST
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
+                REAL-TIME STOCK
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                SMART ROUTING
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                AI AGRONOMY
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                TRACEABLE BATCH
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 2. HOW IT WORKS: CINEMATIC JOURNEY PIPELINE */}
+      <section id="how-it-works" className="py-24 border-t border-white/[0.06] relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-2xl mb-16 space-y-3">
+            <div className="text-[11px] font-mono text-emerald-400 tracking-wider uppercase">
+              THE FULL-CYCLE ARCHITECTURE
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+              The Intelligent Farm-to-Home Cycle
+            </h2>
+            <p className="text-sm text-zinc-400 leading-relaxed">
+              Eliminating intermediaries through automated consignment workflows, real-time inventory synchronization, and cryptographic OTP handovers.
+            </p>
+          </div>
+
+          {/* Interactive 5-Step Journey Pipeline */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 relative">
+            {journeySteps.map((step, idx) => {
+              const StepIcon = step.icon;
+              const isActive = activeJourneyStep === idx;
+              return (
+                <div
+                  key={step.num}
+                  onMouseEnter={() => setActiveJourneyStep(idx)}
+                  className={`p-5 rounded-2xl border transition-all cursor-pointer relative group flex flex-col justify-between ${
+                    isActive
+                      ? 'bg-[#121620] border-emerald-500/50 shadow-xl shadow-emerald-950/20'
+                      : 'bg-[#0e1117] border-white/[0.06] hover:border-white/20'
+                  }`}
+                >
+                  <div className="space-y-4">
+                    {/* Step Number & Tag */}
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-xs font-bold text-emerald-400">
+                        {step.num}
+                      </span>
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                        <StepIcon className="w-4 h-4" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-bold text-white mb-1.5 flex items-center gap-1.5">
+                        {step.title}
+                      </h3>
+                      <p className="text-xs text-zinc-400 leading-relaxed">
+                        {step.desc}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 mt-4 border-t border-white/[0.06] text-[10px] font-mono text-zinc-500">
+                    {step.tag}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Active Step Deep-Dive Display */}
+          <div className="mt-8 p-6 bg-[#0e1117] border border-white/[0.08] rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+            <div className="space-y-1">
+              <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider">
+                STAGE {journeySteps[activeJourneyStep].num} IN-DEPTH
+              </span>
+              <h4 className="text-base font-bold text-white">
+                {journeySteps[activeJourneyStep].title} — {journeySteps[activeJourneyStep].desc}
+              </h4>
+              <p className="text-xs text-zinc-400 max-w-3xl leading-relaxed">
+                {journeySteps[activeJourneyStep].detail}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => openAuth('auth')}
+              className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer shrink-0"
+            >
+              Start Experience →
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* 3. FARMER SECTION: BUILT FOR THE PEOPLE WHO GROW IT */}
+      <section id="farmers" className="py-24 border-t border-white/[0.06] relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+            {/* Left Narrative */}
+            <div className="lg:col-span-5 space-y-6">
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono">
+                <Sprout className="w-3.5 h-3.5" />
+                <span>FOR GROWERS & PRODUCERS</span>
               </div>
 
-              {/* Tagline */}
-              <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
-                From Farm to Home,<br />
-                <span className="text-emerald-400">Smarter.</span>
-              </h1>
+              <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+                Built for the people who grow it.
+              </h2>
 
-              <p className="text-sm text-zinc-400 leading-relaxed max-w-md">
-                Connecting growers, conscious consumers, and temperature-controlled transit across Andhra & Telangana. 0% middleman deduction.
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                Direct market access with guaranteed transparency. Farm2Home equips farmers with real-time demand forecasts, automated crop-cycle planning, micro-climate weather advisories, and direct customer relationships with 0% middleman deduction.
+              </p>
+
+              {/* Core Farmer Highlights List */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-md bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Crop Planning & Harvest Timing</h4>
+                    <p className="text-xs text-zinc-400">Plan seed-to-harvest cycles with regional crop calendars for Andhra & Telangana.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-md bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Inventory Intelligence</h4>
+                    <p className="text-xs text-zinc-400">Manage real-time inventory with unit-level precision across kg, quintal, and crate.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-md bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Direct Market Analytics</h4>
+                    <p className="text-xs text-zinc-400">Live price realization curves without commission cuts or delayed mandi payments.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-md bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white">AI Agronomist Grounding</h4>
+                    <p className="text-xs text-zinc-400">24/7 localized crop pathology, soil enrichment, and weather risk guidance.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4">
+                <button
+                  type="button"
+                  onClick={() => openAuth('auth', 'farmer')}
+                  className="px-6 py-3 bg-emerald-400 hover:bg-emerald-300 text-zinc-950 font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <span>Join as Farmer</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Right: Dashboard-Inspired Architectural UI Preview */}
+            <div className="lg:col-span-7">
+              <div className="bg-[#0e1117] border border-white/[0.08] rounded-2xl p-5 sm:p-6 shadow-2xl relative overflow-hidden space-y-5">
+                {/* Dashboard Header Bar */}
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold text-sm">
+                      SD
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-white">Saraswathi Devi</span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          VERIFIED PRODUCER
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-400">Green Organic Orchards · Chittoor, AP</p>
+                    </div>
+                  </div>
+                  <div className="text-right font-mono">
+                    <span className="text-xs font-bold text-white">₹42,850</span>
+                    <p className="text-[10px] text-emerald-400">0% Commission Cut</p>
+                  </div>
+                </div>
+
+                {/* Dashboard Metrics Cards */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 bg-[#131720] border border-white/[0.06] rounded-xl">
+                    <span className="text-[10px] font-mono text-zinc-400 uppercase">ACTIVE CROPS</span>
+                    <p className="text-base font-bold text-white mt-1">4 Plots</p>
+                    <p className="text-[10px] text-emerald-400 mt-0.5">Mango, Paddy, Palak</p>
+                  </div>
+                  <div className="p-3 bg-[#131720] border border-white/[0.06] rounded-xl">
+                    <span className="text-[10px] font-mono text-zinc-400 uppercase">BATCH INVENTORY</span>
+                    <p className="text-base font-bold text-white mt-1">415 kg</p>
+                    <p className="text-[10px] text-zinc-400 mt-0.5">Synchronized live</p>
+                  </div>
+                  <div className="p-3 bg-[#131720] border border-white/[0.06] rounded-xl">
+                    <span className="text-[10px] font-mono text-zinc-400 uppercase">DISPATCH STATUS</span>
+                    <p className="text-base font-bold text-emerald-400 mt-1">Ready</p>
+                    <p className="text-[10px] text-zinc-400 mt-0.5">Transit allocated</p>
+                  </div>
+                </div>
+
+                {/* Active Harvest Inventory Table Preview */}
+                <div className="border border-white/[0.06] rounded-xl overflow-hidden">
+                  <div className="bg-[#131720] px-3.5 py-2 border-b border-white/[0.06] flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                    <span>LIVE HARVEST BATCHES</span>
+                    <span>PRICE / UNIT</span>
+                  </div>
+                  <div className="divide-y divide-white/[0.06] bg-[#0c0e13]">
+                    <div className="px-3.5 py-2.5 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-white">Banganapalli Mangoes</span>
+                        <span className="text-zinc-500 text-[10px] ml-2">Export Grade A · 45 kg left</span>
+                      </div>
+                      <span className="font-mono text-emerald-400 font-bold">₹140 / kg</span>
+                    </div>
+                    <div className="px-3.5 py-2.5 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-white">Organic Country Tomatoes</span>
+                        <span className="text-zinc-500 text-[10px] ml-2">Vine Harvested · 120 kg left</span>
+                      </div>
+                      <span className="font-mono text-emerald-400 font-bold">₹36 / kg</span>
+                    </div>
+                    <div className="px-3.5 py-2.5 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-white">Aged Sona Masoori Rice</span>
+                        <span className="text-zinc-500 text-[10px] ml-2">12 Month Aged · 250 kg left</span>
+                      </div>
+                      <span className="font-mono text-emerald-400 font-bold">₹78 / kg</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Weather Advisory Snippet */}
+                <div className="p-3.5 bg-emerald-950/20 border border-emerald-500/20 rounded-xl flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <CloudSun className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <span className="font-bold text-emerald-300">Chittoor Region Advisory</span>
+                      <p className="text-[11px] text-zinc-400">Clear morning conditions optimal for dawn mango picking.</p>
+                    </div>
+                  </div>
+                  <span className="font-mono text-emerald-400 text-xs">28°C · 64% RH</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. CUSTOMER SECTION: KNOW WHAT YOU'RE BUYING */}
+      <section id="marketplace" className="py-24 border-t border-white/[0.06] relative bg-[#09090b]/40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
+            <div className="max-w-2xl space-y-3">
+              <div className="text-[11px] font-mono text-emerald-400 tracking-wider uppercase">
+                CONSUMER INTELLIGENCE & FRESHNESS
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+                Know what you're buying.
+              </h2>
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                Direct traceability for every item. Transparent harvest timestamps, verified grower locations, and real-time inventory counts straight from regional agricultural clusters.
               </p>
             </div>
 
-            {/* Farm2Home Journey Flow: Farm → Marketplace → Delivery → Home */}
-            <div className="bg-[#0f1115]/90 border border-white/[0.07] rounded-2xl p-4 sm:p-5 shadow-lg space-y-3.5">
-              <div className="text-[11px] font-mono font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-                <span>The Direct Supply Journey</span>
-                <span className="h-px flex-1 bg-white/[0.08]" />
-              </div>
-
-              <div className="grid grid-cols-4 gap-2 text-center relative">
-                {/* Step 1: Farm */}
-                <div className="space-y-1.5">
-                  <div className="w-9 h-9 mx-auto rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm">
-                    🌾
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-white">{t.auth.journeyFarm}</p>
-                    <p className="text-[10px] text-zinc-500 leading-tight mt-0.5 hidden sm:block">
-                      Dawn harvest
-                    </p>
-                  </div>
-                </div>
-
-                {/* Step 2: Marketplace */}
-                <div className="space-y-1.5">
-                  <div className="w-9 h-9 mx-auto rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 text-sm">
-                    <Store className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-white">{t.auth.journeyMarketplace}</p>
-                    <p className="text-[10px] text-zinc-500 leading-tight mt-0.5 hidden sm:block">
-                      Fair pricing
-                    </p>
-                  </div>
-                </div>
-
-                {/* Step 3: Delivery */}
-                <div className="space-y-1.5">
-                  <div className="w-9 h-9 mx-auto rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 text-sm">
-                    <Truck className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-white">{t.auth.journeyDelivery}</p>
-                    <p className="text-[10px] text-zinc-500 leading-tight mt-0.5 hidden sm:block">
-                      Cold chain
-                    </p>
-                  </div>
-                </div>
-
-                {/* Step 4: Home */}
-                <div className="space-y-1.5">
-                  <div className="w-9 h-9 mx-auto rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 text-sm">
-                    <Home className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-white">{t.auth.journeyHome}</p>
-                    <p className="text-[10px] text-zinc-500 leading-tight mt-0.5 hidden sm:block">
-                      6-digit OTP
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Subtle verification guarantees */}
-            <div className="flex items-center gap-5 text-xs text-zinc-400 pt-1">
-              <div className="flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>Verified Producers</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>6-Digit Handover</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-emerald-400" />
-                <span>AI Agronomy</span>
-              </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleExploreAction}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <span>Browse Full Catalog</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
 
-          {/* RIGHT SIDE: Main Authentication Card */}
-          <div className="lg:col-span-6">
-            <div className="bg-[#0f1115]/95 border border-white/[0.08] rounded-2xl p-6 sm:p-8 shadow-2xl shadow-black/80 backdrop-blur-xl relative">
-              
-              {/* Alert Banners */}
-              {errorMessage && (
-                <div
-                  role="alert"
-                  className="mb-5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-start gap-2.5 animate-fadeIn"
-                >
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
-                  <span className="leading-relaxed flex-1">{errorMessage}</span>
-                  <button
-                    onClick={() => setErrorMessage(null)}
-                    className="text-rose-400 hover:text-white text-xs p-0.5"
-                    aria-label="Dismiss error"
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
+          {/* Real Products Live Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {previewProducts.map((product: any) => (
+              <div
+                key={product.id}
+                className="bg-[#0e1117] border border-white/[0.08] hover:border-emerald-500/40 rounded-2xl overflow-hidden transition-all duration-200 group flex flex-col justify-between"
+              >
+                <div>
+                  {/* Product Visual Container with Fallback */}
+                  <div className="relative h-44 w-full bg-[#141820] overflow-hidden">
+                    <img
+                      src={product.image_url}
+                      alt={product.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => {
+                        // Fallback gradient if external url fails
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                    {/* Fallback styling overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0e1117] via-transparent to-transparent opacity-90" />
 
-              {successMessage && (
-                <div
-                  role="status"
-                  className="mb-5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-start gap-2.5 animate-fadeIn"
-                >
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
-                  <span className="leading-relaxed flex-1">{successMessage}</span>
-                  <button
-                    onClick={() => setSuccessMessage(null)}
-                    className="text-emerald-400 hover:text-white text-xs p-0.5"
-                    aria-label="Dismiss message"
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
+                    {/* Organic Badge */}
+                    {product.is_organic && (
+                      <div className="absolute top-3 left-3 px-2 py-0.5 rounded-md bg-emerald-500/90 text-zinc-950 font-bold text-[10px] tracking-wide flex items-center gap-1 shadow-md">
+                        <BadgeCheck className="w-3 h-3" />
+                        <span>ORGANIC</span>
+                      </div>
+                    )}
 
-              <AnimatePresence mode="wait">
-                {/* 1. SIGN IN VIEW (DEFAULT) */}
-                {view === 'signin' && (
-                  <motion.div
-                    key="signin"
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.16 }}
-                    className="space-y-5"
-                  >
-                    {/* Header */}
-                    <div>
-                      <h2 className="text-xl font-bold tracking-tight text-white">
-                        {t.auth.welcomeBack}
-                      </h2>
-                      <p className="text-xs text-zinc-400 mt-1">
-                        {t.auth.signInToContinue}
-                      </p>
+                    {/* Freshness / Stock Badge */}
+                    <div className="absolute top-3 right-3 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md border border-white/10 text-emerald-400 font-mono text-[10px]">
+                      {product.stock > 0 ? `${product.stock} ${product.unit} left` : 'Out of Stock'}
                     </div>
 
-                    {/* Primary Option 1: Google Continue */}
-                    <div className="relative w-full group overflow-hidden rounded-xl">
-                      <button
-                        type="button"
-                        onClick={handleGoogleSignInFallback}
-                        disabled={loading}
-                        className="w-full py-2.5 px-4 bg-[#141820] hover:bg-[#1a1f2c] border border-white/10 hover:border-emerald-500/30 rounded-xl text-xs font-semibold text-white transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-sm active:scale-[0.99]"
-                      >
-                        <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                          <path
-                            fill="#4285F4"
-                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                          />
-                          <path
-                            fill="#34A853"
-                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                          />
-                          <path
-                            fill="#FBBC05"
-                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                          />
-                          <path
-                            fill="#EA4335"
-                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                          />
-                        </svg>
-                        <span>{t.auth.continueWithGoogle}</span>
-                      </button>
-                      <div
-                        ref={googleBtnRef}
-                        className="absolute inset-0 w-full h-full opacity-[0.0001] cursor-pointer z-10 flex items-center justify-center overflow-hidden [&_iframe]:w-full [&_iframe]:min-w-full [&_iframe]:min-h-full [&_iframe]:scale-125 pointer-events-auto"
-                        title={t.auth.continueWithGoogle}
-                      />
+                    {/* Harvest Date Tag */}
+                    <div className="absolute bottom-2 left-3 text-[10px] font-mono text-zinc-400 flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-emerald-400" />
+                      <span>Harvested 5:00 AM Today</span>
                     </div>
+                  </div>
 
-                    {/* Divider */}
-                    <div className="relative flex items-center justify-center my-3">
-                      <div className="w-full border-t border-white/[0.08]" />
-                      <span className="absolute bg-[#0f1115] px-3 text-[11px] font-mono text-zinc-500 uppercase tracking-wider">
-                        {t.auth.orContinueWithEmail}
+                  {/* Product Details */}
+                  <div className="p-4 space-y-2">
+                    <h3 className="text-sm font-bold text-white group-hover:text-emerald-300 transition-colors">
+                      {product.title}
+                    </h3>
+                    <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed">
+                      {product.description}
+                    </p>
+
+                    {/* Farmer Attribution */}
+                    <div className="pt-2 flex items-center gap-2 text-[11px] text-zinc-400 border-t border-white/[0.06]">
+                      <Sprout className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span className="truncate">
+                        {product.farmer_name} · {product.farmer_location}
                       </span>
                     </div>
+                  </div>
+                </div>
 
-                    {/* Email & Password Form */}
-                    <form onSubmit={handleEmailSignIn} className="space-y-3.5">
-                      <div>
-                        <label
-                          htmlFor="signin-email"
-                          className="text-xs font-semibold text-zinc-300 mb-1.5 block"
-                        >
-                          {t.auth.emailAddress}
-                        </label>
-                        <input
-                          id="signin-email"
-                          type="email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          placeholder="you@example.com"
-                          required
-                          autoComplete="email"
-                          className="w-full px-3.5 py-2.5 bg-[#141820] border border-white/10 rounded-xl text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 transition-all"
-                        />
-                      </div>
-
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label
-                            htmlFor="signin-password"
-                            className="text-xs font-semibold text-zinc-300"
-                          >
-                            {t.auth.password}
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setErrorMessage(
-                                'To reset your password, please contact Farm2Home support or sign in instantly with Phone OTP.'
-                              )
-                            }
-                            className="text-[11px] text-zinc-400 hover:text-emerald-400 transition-colors cursor-pointer"
-                          >
-                            {t.auth.forgotPassword}
-                          </button>
-                        </div>
-                        <div className="relative">
-                          <input
-                            id="signin-password"
-                            type={showPassword ? 'text' : 'password'}
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Enter your password"
-                            required
-                            autoComplete="current-password"
-                            className="w-full pl-3.5 pr-10 py-2.5 bg-[#141820] border border-white/10 rounded-xl text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 transition-all"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword(!showPassword)}
-                            aria-label={showPassword ? 'Hide password' : 'Show password'}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-1"
-                          >
-                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Primary Sign In Button */}
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] text-zinc-950 font-bold rounded-xl text-xs shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
-                      >
-                        {loading ? (
-                          <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
-                        ) : (
-                          <span>{t.auth.signIn}</span>
-                        )}
-                      </button>
-                    </form>
-
-                    {/* Secondary Actions (Phone OTP & Passkey) */}
-                    <div className="pt-2 border-t border-white/[0.06] space-y-2">
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => switchView('phone')}
-                          disabled={loading}
-                          className="py-2 px-3 bg-[#141820] hover:bg-[#1b212c] border border-white/10 rounded-xl text-[11px] font-semibold text-zinc-300 hover:text-white transition-all flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Phone OTP</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => switchView('passkey')}
-                          disabled={loading}
-                          className="py-2 px-3 bg-[#141820] hover:bg-[#1b212c] border border-white/10 rounded-xl text-[11px] font-semibold text-zinc-300 hover:text-white transition-all flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          <Fingerprint className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Passkey</span>
-                        </button>
-                      </div>
-
-                      {/* Toggle to Sign Up */}
-                      <div className="text-center pt-2 text-xs text-zinc-400">
-                        <span>{t.auth.newToFarm2Home} </span>
-                        <button
-                          type="button"
-                          onClick={() => switchView('signup')}
-                          className="text-emerald-400 hover:text-emerald-300 font-bold underline-offset-2 hover:underline cursor-pointer"
-                        >
-                          {t.auth.createAccountLink}
-                        </button>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* 2. SIGN UP VIEW (CREATE ACCOUNT) */}
-                {view === 'signup' && (
-                  <motion.div
-                    key="signup"
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.16 }}
-                    className="space-y-4"
+                {/* Card Action Footer */}
+                <div className="p-4 pt-0 flex items-center justify-between">
+                  <div className="font-mono">
+                    <span className="text-base font-extrabold text-white">₹{product.price}</span>
+                    <span className="text-xs text-zinc-500"> / {product.unit}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openAuth('auth')}
+                    className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                   >
-                    <div>
-                      <h2 className="text-xl font-bold tracking-tight text-white">
-                        {t.auth.createYourAccount}
-                      </h2>
-                      <p className="text-xs text-zinc-400 mt-0.5">
-                        {t.auth.joinFarm2Home}
-                      </p>
-                    </div>
-
-                    <form onSubmit={handleEmailSignUp} className="space-y-3">
-                      <div>
-                        <label
-                          htmlFor="signup-name"
-                          className="text-xs font-semibold text-zinc-300 mb-1 block"
-                        >
-                          {t.auth.fullName}
-                        </label>
-                        <input
-                          id="signup-name"
-                          type="text"
-                          value={fullName}
-                          onChange={(e) => setFullName(e.target.value)}
-                          placeholder="e.g. Ramesh Kumar"
-                          required
-                          autoComplete="name"
-                          className="w-full px-3.5 py-2 bg-[#141820] border border-white/10 rounded-xl text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 transition-all"
-                        />
-                      </div>
-
-                      <div>
-                        <label
-                          htmlFor="signup-email"
-                          className="text-xs font-semibold text-zinc-300 mb-1 block"
-                        >
-                          {t.auth.emailAddress}
-                        </label>
-                        <input
-                          id="signup-email"
-                          type="email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          placeholder="you@example.com"
-                          required
-                          autoComplete="email"
-                          className="w-full px-3.5 py-2 bg-[#141820] border border-white/10 rounded-xl text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 transition-all"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <div>
-                          <label
-                            htmlFor="signup-password"
-                            className="text-xs font-semibold text-zinc-300 mb-1 block"
-                          >
-                            {t.auth.password}
-                          </label>
-                          <div className="relative">
-                            <input
-                              id="signup-password"
-                              type={showPassword ? 'text' : 'password'}
-                              value={password}
-                              onChange={(e) => setPassword(e.target.value)}
-                              placeholder="Min 6 characters"
-                              required
-                              autoComplete="new-password"
-                              className="w-full pl-3 pr-8 py-2 bg-[#141820] border border-white/10 rounded-xl text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 transition-all"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowPassword(!showPassword)}
-                              aria-label={showPassword ? 'Hide password' : 'Show password'}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-                            >
-                              {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label
-                            htmlFor="signup-confirm"
-                            className="text-xs font-semibold text-zinc-300 mb-1 block"
-                          >
-                            {t.auth.confirmPassword}
-                          </label>
-                          <div className="relative">
-                            <input
-                              id="signup-confirm"
-                              type={showConfirmPassword ? 'text' : 'password'}
-                              value={confirmPassword}
-                              onChange={(e) => setConfirmPassword(e.target.value)}
-                              placeholder="Confirm password"
-                              required
-                              autoComplete="new-password"
-                              className="w-full pl-3 pr-8 py-2 bg-[#141820] border border-white/10 rounded-xl text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 transition-all"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                              aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-                            >
-                              {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* ROLE SELECTION: Clean Three-Option Selector */}
-                      <div>
-                        <span className="text-xs font-semibold text-zinc-300 mb-1.5 block">
-                          {t.auth.selectRole}
-                        </span>
-                        <div className="grid grid-cols-3 gap-2">
-                          {/* Customer */}
-                          <button
-                            type="button"
-                            onClick={() => setSelectedRole('customer')}
-                            className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                              selectedRole === 'customer'
-                                ? 'bg-emerald-500/15 border-emerald-500 text-white ring-1 ring-emerald-500/30'
-                                : 'bg-[#141820] border-white/[0.08] text-zinc-400 hover:text-white'
-                            }`}
-                          >
-                            <span className="text-base">🛒</span>
-                            <span className="text-xs font-bold mt-1 block">Customer</span>
-                            <span className="text-[10px] text-zinc-400 leading-tight block mt-0.5">
-                              Buy fresh produce
-                            </span>
-                          </button>
-
-                          {/* Farmer */}
-                          <button
-                            type="button"
-                            onClick={() => setSelectedRole('farmer')}
-                            className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                              selectedRole === 'farmer'
-                                ? 'bg-emerald-500/15 border-emerald-500 text-white ring-1 ring-emerald-500/30'
-                                : 'bg-[#141820] border-white/[0.08] text-zinc-400 hover:text-white'
-                            }`}
-                          >
-                            <span className="text-base">🌾</span>
-                            <span className="text-xs font-bold mt-1 block">Farmer</span>
-                            <span className="text-[10px] text-zinc-400 leading-tight block mt-0.5">
-                              Sell & manage harvest
-                            </span>
-                          </button>
-
-                          {/* Delivery Partner */}
-                          <button
-                            type="button"
-                            onClick={() => setSelectedRole('delivery')}
-                            className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                              selectedRole === 'delivery'
-                                ? 'bg-emerald-500/15 border-emerald-500 text-white ring-1 ring-emerald-500/30'
-                                : 'bg-[#141820] border-white/[0.08] text-zinc-400 hover:text-white'
-                            }`}
-                          >
-                            <span className="text-base">🚚</span>
-                            <span className="text-xs font-bold mt-1 block">Delivery</span>
-                            <span className="text-[10px] text-zinc-400 leading-tight block mt-0.5">
-                              Deliver & transit jobs
-                            </span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Primary Create Account Button */}
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] text-zinc-950 font-bold rounded-xl text-xs shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer mt-1"
-                      >
-                        {loading ? (
-                          <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
-                        ) : (
-                          <span>{t.auth.signUp}</span>
-                        )}
-                      </button>
-                    </form>
-
-                    {/* Toggle back to Sign In */}
-                    <div className="text-center pt-2 border-t border-white/[0.06] text-xs text-zinc-400">
-                      <span>{t.auth.alreadyHaveAccount} </span>
-                      <button
-                        type="button"
-                        onClick={() => switchView('signin')}
-                        className="text-emerald-400 hover:text-emerald-300 font-bold underline-offset-2 hover:underline cursor-pointer"
-                      >
-                        {t.auth.signIn}
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* 3. PHONE OTP VIEW */}
-                {view === 'phone' && (
-                  <motion.div
-                    key="phone"
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.16 }}
-                    className="space-y-4"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-                          <Phone className="w-4 h-4 text-emerald-400" />
-                          <span>{otpStep === 'request' ? t.auth.otpStep1Title : t.auth.otpStep2Title}</span>
-                        </h2>
-                        <p className="text-xs text-zinc-400 mt-0.5">
-                          {otpStep === 'request'
-                            ? 'Instant verification with 6-digit code'
-                            : `Code sent to +91 ${phone.replace(/\D/g, '').slice(-10)}`}
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => switchView('signin')}
-                        className="text-xs text-zinc-400 hover:text-white"
-                      >
-                        {t.auth.backToSignIn}
-                      </button>
-                    </div>
-
-                    {otpStep === 'request' ? (
-                      <form onSubmit={handleSendOtp} className="space-y-4">
-                        <div>
-                          <label
-                            htmlFor="phone-number"
-                            className="text-xs font-semibold text-zinc-300 mb-1.5 block"
-                          >
-                            {t.auth.mobileNumber}
-                          </label>
-                          <div className="relative flex items-center">
-                            <span className="absolute left-3 text-xs font-mono font-bold text-zinc-400">
-                              +91
-                            </span>
-                            <input
-                              id="phone-number"
-                              type="tel"
-                              value={phone}
-                              onChange={(e) => setPhone(e.target.value)}
-                              placeholder="98765 43210"
-                              required
-                              autoFocus
-                              className="w-full pl-12 pr-3.5 py-2.5 bg-[#141820] border border-white/10 rounded-xl text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 transition-all font-mono"
-                            />
-                          </div>
-                        </div>
-
-                        <button
-                          type="submit"
-                          disabled={loading}
-                          className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] text-zinc-950 font-bold rounded-xl text-xs shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          {loading ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
-                          ) : (
-                            <span>{t.auth.sendOtp}</span>
-                          )}
-                        </button>
-                      </form>
-                    ) : (
-                      <form onSubmit={handleVerifyOtp} className="space-y-4">
-                        <div>
-                          <label
-                            htmlFor="otp-code"
-                            className="text-xs font-semibold text-zinc-300 mb-1.5 block"
-                          >
-                            {t.auth.enterOtpCode}
-                          </label>
-                          <input
-                            id="otp-code"
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            maxLength={6}
-                            value={otpCode}
-                            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                            placeholder="••••••"
-                            required
-                            autoFocus
-                            className="w-full text-center tracking-[0.5em] font-mono text-lg font-bold py-2.5 bg-[#141820] border border-emerald-500/40 rounded-xl text-emerald-400 focus:outline-none focus:border-emerald-500 transition-all"
-                          />
-                        </div>
-
-                        {/* Development Sandbox OTP Display (clearly designated as test) */}
-                        {devOtpHint && (
-                          <div className="p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15 text-center">
-                            <span className="text-[11px] text-zinc-400 font-mono">
-                              Development Sandbox Code: <strong className="text-emerald-400">{devOtpHint}</strong>
-                            </span>
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between text-xs text-zinc-400 px-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOtpStep('request');
-                              setOtpCode('');
-                            }}
-                            className="text-zinc-400 hover:text-white underline-offset-2 hover:underline"
-                          >
-                            {t.auth.changeNumber}
-                          </button>
-
-                          {resendCooldown > 0 ? (
-                            <span className="font-mono text-zinc-500 text-[11px]">
-                              {interpolate(t.auth.resendInSeconds, { seconds: resendCooldown })}
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={handleSendOtp}
-                              disabled={loading}
-                              className="text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer"
-                            >
-                              {t.auth.resendOtp}
-                            </button>
-                          )}
-                        </div>
-
-                        <button
-                          type="submit"
-                          disabled={loading}
-                          className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] text-zinc-950 font-bold rounded-xl text-xs shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          {loading ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
-                          ) : (
-                            <span>{t.auth.verifyAndEnter}</span>
-                          )}
-                        </button>
-                      </form>
-                    )}
-                  </motion.div>
-                )}
-
-                {/* 4. PASSKEY VIEW */}
-                {view === 'passkey' && (
-                  <motion.div
-                    key="passkey"
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.16 }}
-                    className="space-y-5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                          <Fingerprint className="w-5 h-5 text-amber-400" />
-                        </div>
-                        <div>
-                          <h2 className="text-base font-bold tracking-tight text-white">
-                            {t.auth.passkeyHeadline}
-                          </h2>
-                          <p className="text-xs text-zinc-400 mt-0.5">
-                            {t.auth.passkeySubhead}
-                          </p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => switchView('signin')}
-                        className="text-xs text-zinc-400 hover:text-white"
-                      >
-                        ✕
-                      </button>
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-[#141820] border border-white/[0.06] space-y-2 text-xs text-zinc-300">
-                      <p>
-                        Passkeys allow biometric authentication with Face ID, Touch ID, or security hardware keys without needing to remember a password.
-                      </p>
-                      <p className="text-zinc-500 text-[11px]">
-                        Requires a passkey previously registered in your Farm2Home account security settings.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handlePasskeyAuth}
-                      disabled={loading}
-                      className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 active:scale-[0.99] text-zinc-950 font-bold rounded-xl text-xs shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      {loading ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
-                      ) : (
-                        <span>{t.auth.passkeyButton}</span>
-                      )}
-                    </button>
-
-                    <div className="text-center">
-                      <button
-                        type="button"
-                        onClick={() => switchView('signin')}
-                        className="text-xs text-zinc-400 hover:text-white underline-offset-2 hover:underline"
-                      >
-                        {t.auth.backToSignIn}
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                    Add to Basket
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
 
+          {/* Transparency Guarantees Grid */}
+          <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            <div className="p-4 bg-[#0e1117] border border-white/[0.06] rounded-xl">
+              <span className="font-mono text-emerald-400 text-xs font-bold block mb-1">0% CHEMICAL RESIDUES</span>
+              <span className="text-xs text-zinc-400">Regular organic testing on verified batches</span>
+            </div>
+            <div className="p-4 bg-[#0e1117] border border-white/[0.06] rounded-xl">
+              <span className="font-mono text-emerald-400 text-xs font-bold block mb-1">6-DIGIT OTP HANDOFF</span>
+              <span className="text-xs text-zinc-400">Cryptographically verified delivery signoff</span>
+            </div>
+            <div className="p-4 bg-[#0e1117] border border-white/[0.06] rounded-xl">
+              <span className="font-mono text-emerald-400 text-xs font-bold block mb-1">PROVENANCE LOGS</span>
+              <span className="text-xs text-zinc-400">Inspect exact harvest field coordinates</span>
+            </div>
+            <div className="p-4 bg-[#0e1117] border border-white/[0.06] rounded-xl">
+              <span className="font-mono text-emerald-400 text-xs font-bold block mb-1">ZERO EXCESS MARKUP</span>
+              <span className="text-xs text-zinc-400">Direct farm gate pricing passed to customers</span>
+            </div>
+          </div>
         </div>
-      </main>
+      </section>
 
-      {/* FOOTER: Minimal & Professional */}
-      <footer className="border-t border-white/[0.06] bg-[#09090b] py-4 text-xs text-zinc-500">
-        <div className="max-w-6xl mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-2.5">
-          <p>© {new Date().getFullYear()} Farm2Home · Intelligent Agri-Tech Infrastructure</p>
-          <div className="flex items-center gap-4 text-zinc-500">
-            <span>Direct Farm Sourcing</span>
-            <span>·</span>
-            <span>Cold-Chain Assurance</span>
-            <span>·</span>
-            <span>6-Digit Verified Handover</span>
+      {/* 5. DELIVERY SECTION: EVERY ORDER HAS A PATH */}
+      <section id="delivery" className="py-24 border-t border-white/[0.06] relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+            {/* Left: Route Telemetry Visualization */}
+            <div className="lg:col-span-7 order-2 lg:order-1">
+              <div className="bg-[#0e1117] border border-white/[0.08] rounded-2xl p-5 sm:p-6 shadow-2xl space-y-6">
+                {/* Consignment Header */}
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+                      <Truck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-white">CONSIGNMENT #F2H-8921</span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                          IN TRANSIT
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-400">Cold Chain Active · Target ETA: 42 mins</p>
+                    </div>
+                  </div>
+                  <div className="text-right font-mono text-xs">
+                    <span className="text-emerald-400 font-bold">4.2°C</span>
+                    <p className="text-[10px] text-zinc-500">Cabin Temp</p>
+                  </div>
+                </div>
+
+                {/* Abstract Visual Route Path */}
+                <div className="space-y-4">
+                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
+                    TRANSIT WAYPOINTS
+                  </div>
+
+                  <div className="space-y-3 relative pl-6 border-l border-white/[0.12] ml-3">
+                    <div className="relative">
+                      <div className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-emerald-500/20 border-2 border-emerald-400" />
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-xs font-bold text-white">Farm Origin · Chittoor Cluster</span>
+                        <span className="font-mono text-[10px] text-zinc-500">06:15 AM · Picked</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400">Batch #SD-39 loaded from Green Organic Orchards</p>
+                    </div>
+
+                    <div className="relative">
+                      <div className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-cyan-500/20 border-2 border-cyan-400 animate-pulse" />
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-xs font-bold text-white">Regional Transit Corridor</span>
+                        <span className="font-mono text-[10px] text-cyan-400">In Transit · 48 km/h</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400">NH-44 Express transit corridor, temperature controlled</p>
+                    </div>
+
+                    <div className="relative">
+                      <div className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-zinc-700 border-2 border-zinc-500" />
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-xs font-bold text-zinc-400">Customer Doorstep · Hyderabad</span>
+                        <span className="font-mono text-[10px] text-zinc-500">ETA 08:30 AM</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-500">Pending 6-Digit OTP Handover Verification</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Driver Benefits Summary */}
+                <div className="grid grid-cols-3 gap-3 pt-2">
+                  <div className="p-3 bg-[#131720] border border-white/[0.06] rounded-xl text-center">
+                    <span className="text-[10px] font-mono text-zinc-400 block">OPTIMIZED PATHS</span>
+                    <span className="text-xs font-bold text-white mt-1 block">Zero Backhauls</span>
+                  </div>
+                  <div className="p-3 bg-[#131720] border border-white/[0.06] rounded-xl text-center">
+                    <span className="text-[10px] font-mono text-zinc-400 block">INSTANT PAYOUTS</span>
+                    <span className="text-xs font-bold text-emerald-400 mt-1 block">Direct UPI</span>
+                  </div>
+                  <div className="p-3 bg-[#131720] border border-white/[0.06] rounded-xl text-center">
+                    <span className="text-[10px] font-mono text-zinc-400 block">OTP PROTOCOL</span>
+                    <span className="text-xs font-bold text-white mt-1 block">100% Verified</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Narrative */}
+            <div className="lg:col-span-5 space-y-6 order-1 lg:order-2">
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-mono">
+                <Truck className="w-3.5 h-3.5" />
+                <span>INTELLIGENT TRANSIT FLEET</span>
+              </div>
+
+              <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+                Every order has a path.
+              </h2>
+
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                Empowering transit partners with structured consignments, verified handoffs, and real-time navigation. Every delivery is protected by two-party 6-digit OTP verification, eliminating delivery disputes and ensuring immediate automated payouts.
+              </p>
+
+              <div className="space-y-3 pt-2">
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-md bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0 mt-0.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Assigned Consignments & Manifests</h4>
+                    <p className="text-xs text-zinc-400">Pre-batched multi-drop routes optimized for cold-chain preservation.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-md bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0 mt-0.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Cryptographic OTP Handoff</h4>
+                    <p className="text-xs text-zinc-400">Cryptographically secure handoff codes eliminate false delivery claims.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-md bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0 mt-0.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Earnings Transparency</h4>
+                    <p className="text-xs text-zinc-400">Fixed rate cards and direct settlement upon OTP verification.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4">
+                <button
+                  type="button"
+                  onClick={() => openAuth('auth', 'delivery')}
+                  className="px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-xs rounded-xl shadow-lg shadow-cyan-500/20 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <span>Deliver with Farm2Home</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 6. AI AGRONOMIST SECTION: INTELLIGENCE FOR EVERY HARVEST */}
+      <section id="agronomist" className="py-24 border-t border-white/[0.06] relative bg-[#09090b]/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-2xl mx-auto text-center space-y-3 mb-16">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono">
+              <Bot className="w-3.5 h-3.5" />
+              <span>FIELD-LEVEL AGRICULTURAL REASONING</span>
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+              Intelligence for every harvest.
+            </h2>
+            <p className="text-sm text-zinc-400 leading-relaxed text-balance">
+              Localized agricultural assistance grounded in regional weather patterns, soil diagnostics, and multi-crop planning. Safe, organic-first practices without chemical overuse.
+            </p>
+          </div>
+
+          {/* Floating AI Agronomist Interactive Mockup */}
+          <div className="max-w-4xl mx-auto bg-[#0e1117] border border-emerald-500/30 rounded-2xl shadow-2xl shadow-emerald-950/20 overflow-hidden">
+            {/* Chat Window Header */}
+            <div className="bg-[#131720] px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                  <Bot className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                    Farm2Home AI Agronomist
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                      GROUNDED
+                    </span>
+                  </h4>
+                  <p className="text-[10px] text-zinc-400 font-mono">
+                    Context: Chittoor Micro-Cluster · Tomato & Mango Orchards
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>READY</span>
+              </div>
+            </div>
+
+            {/* Chat Body Simulation */}
+            <div className="p-6 space-y-4 font-sans text-xs">
+              {/* Farmer Message */}
+              <div className="flex items-start gap-3 justify-end">
+                <div className="bg-[#181d28] border border-white/10 rounded-2xl rounded-tr-sm p-4 text-zinc-200 max-w-lg leading-relaxed">
+                  <span className="text-[10px] font-mono text-zinc-400 block mb-1">Ramesh Reddy (Farmer · Chittoor)</span>
+                  Tomato crop showing early leaf yellowing and brown concentric rings after the continuous rainfall yesterday. What should I inspect first?
+                </div>
+                <div className="w-7 h-7 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-zinc-400 text-xs font-bold shrink-0">
+                  RR
+                </div>
+              </div>
+
+              {/* AI Agronomist Response */}
+              <div className="flex items-start gap-3">
+                <div className="w-7 h-7 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 text-xs font-bold shrink-0">
+                  <Bot className="w-4 h-4" />
+                </div>
+                <div className="bg-[#11141c] border border-emerald-500/25 rounded-2xl rounded-tl-sm p-4 text-zinc-200 max-w-xl space-y-2 leading-relaxed">
+                  <span className="text-[10px] font-mono text-emerald-400 block">AI Agronomist (Diagnostic Guidance)</span>
+                  <p>
+                    Continuous rainfall with ambient temperatures around 28°C frequently triggers <strong>Early Blight (Alternaria solani)</strong> or localized root zone nitrogen leaching.
+                  </p>
+                  <div className="bg-[#090b0e] p-3 rounded-xl border border-white/[0.06] space-y-1.5 text-zinc-300">
+                    <p className="font-semibold text-white">Recommended Immediate Actions:</p>
+                    <p>1. <strong>Field Drainage:</strong> Clear standing water from trenches to prevent root asphyxiation.</p>
+                    <p>2. <strong>Foliar Inspection:</strong> Check lower canopy leaves for target-like concentric rings.</p>
+                    <p>3. <strong>Natural Treatment:</strong> Spray cold-pressed 5% Neem Seed Kernel Extract (NSKE) or copper-free bio-fungicide (Trichoderma viride) during dry evening hours.</p>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 font-mono">
+                    Grounding: Telangana/AP Kharif horticulture advisory schedule · Non-chemical organic preference.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* AI Capability Tags Footer */}
+            <div className="bg-[#121620] px-6 py-3 border-t border-white/[0.06] flex flex-wrap items-center justify-between gap-3 text-[11px] font-mono text-zinc-400">
+              <div className="flex items-center gap-4">
+                <span>✓ MULTILINGUAL NLP</span>
+                <span>✓ WEATHER-AWARE</span>
+                <span>✓ CROP-PLAN CONTEXT</span>
+                <span>✓ SAFE DOSING</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => openAuth('auth')}
+                className="text-emerald-400 hover:text-emerald-300 font-bold transition-colors cursor-pointer"
+              >
+                Consult Agronomist in Telugu, Hindi or English →
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 7. TRUST / SYSTEM TELEMETRY MATRIX */}
+      <section className="py-20 border-t border-white/[0.06] relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-[11px] font-mono text-emerald-400 tracking-wider uppercase mb-8 text-center">
+            PLATFORM CAPABILITIES & SYSTEM ARCHITECTURE
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="p-4 bg-[#0e1117] border border-white/[0.06] rounded-xl text-center space-y-1">
+              <span className="font-mono text-xs font-bold text-white block">REAL-TIME INVENTORY</span>
+              <p className="text-[10px] text-zinc-400">Continuous stock synchronization across farm clusters</p>
+            </div>
+
+            <div className="p-4 bg-[#0e1117] border border-white/[0.06] rounded-xl text-center space-y-1">
+              <span className="font-mono text-xs font-bold text-white block">ROLE-AWARE ACCESS</span>
+              <p className="text-[10px] text-zinc-400">Distinct workspaces for Farmers, Customers & Fleets</p>
+            </div>
+
+            <div className="p-4 bg-[#0e1117] border border-white/[0.06] rounded-xl text-center space-y-1">
+              <span className="font-mono text-xs font-bold text-white block">TRACEABLE ORDERS</span>
+              <p className="text-[10px] text-zinc-400">Provenance tracking from harvest to doorstep</p>
+            </div>
+
+            <div className="p-4 bg-[#0e1117] border border-white/[0.06] rounded-xl text-center space-y-1">
+              <span className="font-mono text-xs font-bold text-white block">AI-ASSISTED AGRONOMY</span>
+              <p className="text-[10px] text-zinc-400">Grounded crop plans with localized micro-climate data</p>
+            </div>
+
+            <div className="p-4 bg-[#0e1117] border border-white/[0.06] rounded-xl text-center space-y-1">
+              <span className="font-mono text-xs font-bold text-white block">MULTILINGUAL</span>
+              <p className="text-[10px] text-zinc-400">Native support for Telugu, Hindi, Tamil & English</p>
+            </div>
+
+            <div className="p-4 bg-[#0e1117] border border-white/[0.06] rounded-xl text-center space-y-1">
+              <span className="font-mono text-xs font-bold text-white block">SECURE SESSIONS</span>
+              <p className="text-[10px] text-zinc-400">Google OAuth, Phone OTP & Passkeys integration</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 8. FINAL CINEMATIC FULL-WIDTH CTA SECTION */}
+      <section className="py-24 border-t border-white/[0.06] relative overflow-hidden bg-gradient-to-b from-[#0c1017] to-[#09090b]">
+        {/* Glow halo */}
+        <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-emerald-500/[0.08] blur-[140px] rounded-full" />
+
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-7 relative z-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.03] border border-emerald-500/30 text-emerald-400 text-xs font-mono">
+            <span>FARM2HOME AGRI-TECH ECOSYSTEM</span>
+          </div>
+
+          <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
+            Grow smarter.<br />
+            Deliver better.<br />
+            <span className="text-emerald-400">Live fresher.</span>
+          </h2>
+
+          <p className="text-base text-zinc-300 max-w-xl mx-auto leading-relaxed">
+            One intelligent platform connecting the agricultural journey from harvest to home.
+          </p>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={handleExploreAction}
+              className="px-6 py-3.5 bg-emerald-400 hover:bg-emerald-300 text-zinc-950 font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/25 transition-all flex items-center gap-2 cursor-pointer active:scale-[0.98]"
+            >
+              <span>Explore Farm2Home</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openAuth('auth')}
+              className="px-6 py-3.5 bg-[#141820] hover:bg-[#1a202c] border border-white/10 hover:border-white/20 text-white font-semibold text-xs rounded-xl transition-all cursor-pointer"
+            >
+              Sign In
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* 9. MINIMAL PREMIUM FOOTER */}
+      <footer className="border-t border-white/[0.06] py-12 bg-[#09090b]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            {/* Brand Wordmark & Tag */}
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                <Sprout className="w-3.5 h-3.5 text-emerald-400" />
+              </div>
+              <span className="text-sm font-bold tracking-tight text-white">
+                Farm<span className="text-emerald-400">2</span>Home
+              </span>
+              <span className="text-xs text-zinc-500 ml-2">
+                · Direct Agricultural Infrastructure
+              </span>
+            </div>
+
+            {/* Navigation links */}
+            <div className="flex flex-wrap items-center gap-6 text-xs text-zinc-400">
+              <a href="#marketplace" className="hover:text-white transition-colors">Marketplace</a>
+              <a href="#farmers" className="hover:text-white transition-colors">Farmers</a>
+              <a href="#delivery" className="hover:text-white transition-colors">Delivery</a>
+              <a href="#agronomist" className="hover:text-white transition-colors">AI Agronomist</a>
+              <button
+                type="button"
+                onClick={() => openAuth('auth')}
+                className="hover:text-white transition-colors cursor-pointer"
+              >
+                Sign In
+              </button>
+            </div>
+
+            {/* Language Selector in Footer */}
+            <div className="flex items-center gap-2 text-xs text-zinc-400 font-mono">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span>Network Active</span>
+              <span className="text-zinc-600">·</span>
+              <span>© {new Date().getFullYear()} Farm2Home</span>
+            </div>
           </div>
         </div>
       </footer>
+
+      {/* Internal Auth Modal Instance (Preserving All Auth Providers) */}
+      <AuthModal
+        isOpen={internalAuthModalOpen}
+        onClose={() => setInternalAuthModalOpen(false)}
+        currentProfile={null}
+        initialMode={internalAuthMode}
+        onAuthSuccess={(profile, userOrToken) => {
+          setInternalAuthModalOpen(false);
+          onAuthSuccess(profile, typeof userOrToken === 'string' ? userOrToken : (userOrToken as any)?.sessionToken || '');
+        }}
+        language={language}
+      />
     </div>
   );
 };
