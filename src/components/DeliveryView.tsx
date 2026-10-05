@@ -19,6 +19,7 @@ import {
 import { Order, Profile, Language } from '../types';
 import { getTranslation } from '../lib/translations';
 import { api } from '../lib/api';
+import { formatOrderItemSummary } from '../lib/quantity';
 
 interface DeliveryViewProps {
   currentProfile: Profile;
@@ -222,10 +223,12 @@ export const DeliveryView: React.FC<DeliveryViewProps> = ({
             <p className="text-xs font-medium text-zinc-400 mt-0.5">
               {currentProfile.phone_number || currentProfile.email}
             </p>
-            <p className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
-              <MapPin className="w-3 h-3 text-zinc-500" />
-              {currentProfile.location}
-            </p>
+            {currentProfile.location ? (
+              <p className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
+                <MapPin className="w-3 h-3 text-zinc-500" />
+                {currentProfile.location}
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -852,7 +855,7 @@ export const DeliveryView: React.FC<DeliveryViewProps> = ({
                       <span className="text-zinc-500 font-bold block text-[10px] uppercase mb-1">
                         {t.customer.allProduce}
                       </span>
-                      {ord.items.map((i) => `${i.title} (${i.quantity} ${i.unit})`).join(', ')}
+                      {ord.items.map((i) => formatOrderItemSummary(i.title, i.quantity, i.unit, language)).join(', ')}
                     </div>
                   </div>
 

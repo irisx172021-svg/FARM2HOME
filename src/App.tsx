@@ -6,18 +6,20 @@ import { DeliveryView } from './components/DeliveryView';
 import { CartDrawer } from './components/CartDrawer';
 import { WeatherWidget } from './components/WeatherWidget';
 import { AiAssistantWidget } from './components/AiAssistantWidget';
-import { RoleSelectionModal } from './components/RoleSelectionModal';
-import { Profile, Product, CartItem, WishlistItem, Order, BrowseHistoryItem, Language, Role } from './types';
+import { AuthModal } from './components/AuthModal';
+import { AuthLandingPage } from './components/AuthLandingPage';
+import { Profile, Product, CartItem, WishlistItem, Order, BrowseHistoryItem, Language, Role, AuthStatus } from './types';
 import { api } from './lib/api';
 import { getTranslation } from './lib/translations';
 import { LanguageProvider } from './context/LanguageContext';
-import { Loader2, CheckCircle2 } from 'lucide-react';
+import { Loader2, CheckCircle2, ShieldCheck, Sprout, LogIn, Sparkles, Truck } from 'lucide-react';
 
 const STORAGE_LANG_KEY = 'farm2home_language';
 
 export const AppContent: React.FC = () => {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [currentProfile, setCurrentProfile] = useState<Profile | null>(null);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('AUTH_LOADING');
   const [language, setLanguageState] = useState<Language>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_LANG_KEY);
@@ -50,14 +52,14 @@ export const AppContent: React.FC = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isWeatherOpen, setIsWeatherOpen] = useState(false);
   const [isAiOpen, setIsAiOpen] = useState(false);
-  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'auth' | 'onboarding' | 'account'>('auth');
   const [activeCustomerTab, setActiveCustomerTab] = useState<'shop' | 'orders' | 'wishlist'>('shop');
   const [activeFarmerTab, setActiveFarmerTab] = useState<string>('overview');
   const [activeDeliveryTab, setActiveDeliveryTab] = useState<string>('history');
   const [searchQuery, setSearchQuery] = useState('');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -66,51 +68,130 @@ export const AppContent: React.FC = () => {
     }, 3500);
   };
 
-  // 1. Initial Load: Profiles
+  // 1. Initial Session Load: Explicit AUTH_LOADING -> PROFILE_LOADING -> AUTHENTICATED / UNAUTHENTICATED
   useEffect(() => {
-    api
-      .getProfiles()
-      .then((res) => {
-        setProfiles(res.profiles);
-        // Default to Rahul Verma (Customer) or first customer profile
-        const defaultCustomer = res.profiles.find((p) => p.role === 'customer') || res.profiles[0];
-        setCurrentProfile(defaultCustomer);
-      })
-      .catch((err) => {
-        console.error('Failed to load profiles:', err);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    async function initSession() {
+      setAuthStatus('AUTH_LOADING');
+      try {
+        // Fetch marketplace profiles
+        const profRes = await api.getProfiles().catch(() => ({ profiles: [] }));
+        setProfiles(profRes.profiles);
+
+        // Check for stored session token and explicit logout flag
+        const existingToken = api.getAuthToken();
+        const hasExplicitlyLoggedOut = localStorage.getItem('f2h_logged_out') === 'true';
+
+        if (existingToken && !hasExplicitlyLoggedOut) {
+          setAuthStatus('PROFILE_LOADING');
+          try {
+            const meRes = await api.getMe();
+            if (meRes.profile) {
+              setCurrentProfile(meRes.profile);
+              setAuthStatus('AUTHENTICATED');
+              if (!meRes.profile.role) {
+                setAuthModalMode('onboarding');
+                setIsAuthModalOpen(true);
+              }
+              return;
+            }
+          } catch (e) {
+            console.warn('Stored session invalid or expired, refreshing token:', e);
+            api.clearAuthToken();
+          }
+        }
+
+        // If no active session or explicit logout, present the unauthenticated landing experience
+        setCurrentProfile(null);
+        setAuthStatus('UNAUTHENTICATED');
+      } catch (err) {
+        console.error('Failed to initialize session:', err);
+        setCurrentProfile(null);
+        setAuthStatus('UNAUTHENTICATED');
+      }
+    }
+
+    initSession();
   }, []);
 
   // 2. Load User Specific Data whenever currentProfile changes
   const refreshUserData = async () => {
-    if (!currentProfile) return;
     try {
-      const [prodRes, cartRes, wishRes, ordRes, histRes] = await Promise.all([
-        api.getProducts(),
-        currentProfile.role === 'customer' ? api.getCart(currentProfile.id) : Promise.resolve({ cart: [] }),
-        currentProfile.role === 'customer' ? api.getWishlist(currentProfile.id) : Promise.resolve({ wishlist: [] }),
-        api.getOrders(currentProfile.id, currentProfile.role),
-        currentProfile.role === 'customer' ? api.getBrowseHistory(currentProfile.id) : Promise.resolve({ history: [] }),
-      ]);
-
+      const prodRes = await api.getProducts();
       setProducts(prodRes.products);
-      setCartItems(cartRes.cart);
-      setWishlist(wishRes.wishlist);
-      setOrders(ordRes.orders);
-      setBrowseHistory(histRes.history);
+
+      if (currentProfile && authStatus === 'AUTHENTICATED') {
+        const [cartRes, wishRes, ordRes, histRes] = await Promise.all([
+          currentProfile.role === 'customer' ? api.getCart(currentProfile.id) : Promise.resolve({ cart: [] }),
+          currentProfile.role === 'customer' ? api.getWishlist(currentProfile.id) : Promise.resolve({ wishlist: [] }),
+          api.getOrders(currentProfile.id, currentProfile.role),
+          currentProfile.role === 'customer' ? api.getBrowseHistory(currentProfile.id) : Promise.resolve({ history: [] }),
+        ]);
+
+        setCartItems(cartRes.cart);
+        setWishlist(wishRes.wishlist);
+        setOrders(ordRes.orders);
+        setBrowseHistory(histRes.history);
+      } else {
+        setCartItems([]);
+        setWishlist([]);
+        setOrders([]);
+        setBrowseHistory([]);
+      }
     } catch (err) {
       console.error('Failed to refresh user data:', err);
     }
   };
 
   useEffect(() => {
-    if (currentProfile) {
-      refreshUserData();
+    refreshUserData();
+  }, [currentProfile?.id, currentProfile?.role, authStatus]);
+
+  // Auth Handlers
+  const handleAuthSuccess = (profile: Profile, tokenOrUser?: any) => {
+    if (typeof tokenOrUser === 'string') {
+      api.setAuthToken(tokenOrUser);
     }
-  }, [currentProfile?.id, currentProfile?.role]);
+    localStorage.removeItem('f2h_logged_out');
+    setCurrentProfile(profile);
+    setAuthStatus('AUTHENTICATED');
+    setIsAuthModalOpen(false);
+
+    if (profile.preferred_language) {
+      setLanguage(profile.preferred_language as Language);
+    }
+
+    if (!profile.role) {
+      setAuthModalMode('onboarding');
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    if (profile.role === 'customer') setActiveCustomerTab('shop');
+    if (profile.role === 'farmer') setActiveFarmerTab('overview');
+    if (profile.role === 'delivery') setActiveDeliveryTab('history');
+
+    showToast(`Welcome, ${profile.full_name}!`);
+    refreshUserData();
+  };
+
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch (e) {
+      console.error('Logout error:', e);
+    }
+    localStorage.setItem('f2h_logged_out', 'true');
+    api.clearAuthToken();
+    setCurrentProfile(null);
+    setAuthStatus('UNAUTHENTICATED');
+    setCartItems([]);
+    setWishlist([]);
+    setOrders([]);
+    setBrowseHistory([]);
+    setAuthModalMode('auth');
+    setIsAuthModalOpen(false);
+    showToast('Signed out successfully.');
+  };
 
   // Cart operations
   const handleAddToCart = async (product: Product) => {
@@ -183,13 +264,67 @@ export const AppContent: React.FC = () => {
     }
   };
 
-  if (loading || !currentProfile) {
+  // 1. Initial Neutral Loading State while checking session (mounts immediately without blocking)
+  if (authStatus === 'AUTH_LOADING' || authStatus === 'PROFILE_LOADING') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#09090b] text-white">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
-          <p className="text-sm font-semibold text-zinc-400 tracking-wide">Connecting to Farm2Home Agri-Tech Grid...</p>
-        </div>
+      <div className="min-h-screen flex flex-col bg-[#09090b] text-white selection:bg-emerald-500/30 selection:text-emerald-300 relative overflow-x-hidden">
+        <div className="pointer-events-none fixed -top-40 left-1/4 w-[650px] h-[650px] bg-emerald-500/[0.035] blur-[150px] rounded-full -z-10" />
+        <Header
+          authStatus={authStatus}
+          currentProfile={null}
+          profiles={profiles}
+          onSelectProfile={() => {}}
+          language={language}
+          onSelectLanguage={setLanguage}
+          cartCount={0}
+          wishlistCount={0}
+          onOpenCart={() => {}}
+          onOpenWishlist={() => {}}
+          onToggleAi={() => {}}
+          isAiOpen={false}
+          onToggleWeather={() => {}}
+          isWeatherOpen={false}
+          activeCustomerTab="shop"
+          onSelectCustomerTab={() => {}}
+          searchQuery=""
+          onSearchChange={() => {}}
+          onOpenRoleModal={() => {}}
+          onOpenAuthModal={() => {}}
+          onLogout={() => {}}
+        />
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col items-center justify-center min-h-[60vh]">
+          <div className="py-24 flex flex-col items-center justify-center gap-3">
+            <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+            <p className="text-sm font-semibold text-zinc-400 tracking-wide">
+              {authStatus === 'AUTH_LOADING'
+                ? 'Connecting to Farm2Home Agri-Tech Grid...'
+                : 'Loading Farm2Home profile & role authorization...'}
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // 2. Unauthenticated Visitors Experience (Premium Full-Screen Agri-Tech Landing)
+  if (authStatus === 'UNAUTHENTICATED') {
+    return (
+      <div className="min-h-screen bg-[#09090b] text-white">
+        <AuthLandingPage
+          language={language}
+          onSelectLanguage={setLanguage}
+          onAuthSuccess={handleAuthSuccess}
+          availableProducts={products}
+        />
+        {/* Multipurpose Multi-Provider Auth Modal if triggered */}
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          currentProfile={currentProfile}
+          initialMode={authModalMode}
+          onAuthSuccess={handleAuthSuccess}
+          language={language}
+        />
       </div>
     );
   }
@@ -211,6 +346,7 @@ export const AppContent: React.FC = () => {
 
       {/* Header */}
       <Header
+        authStatus={authStatus}
         currentProfile={currentProfile}
         profiles={profiles}
         onSelectProfile={(p) => {
@@ -223,8 +359,22 @@ export const AppContent: React.FC = () => {
         onSelectLanguage={setLanguage}
         cartCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)}
         wishlistCount={wishlist.length}
-        onOpenCart={() => setIsCartOpen(true)}
-        onOpenWishlist={() => setActiveCustomerTab('wishlist')}
+        onOpenCart={() => {
+          if (!currentProfile || authStatus !== 'AUTHENTICATED') {
+            setAuthModalMode('auth');
+            setIsAuthModalOpen(true);
+            return;
+          }
+          setIsCartOpen(true);
+        }}
+        onOpenWishlist={() => {
+          if (!currentProfile || authStatus !== 'AUTHENTICATED') {
+            setAuthModalMode('auth');
+            setIsAuthModalOpen(true);
+            return;
+          }
+          setActiveCustomerTab('wishlist');
+        }}
         onToggleAi={() => setIsAiOpen((prev) => !prev)}
         isAiOpen={isAiOpen}
         onToggleWeather={() => setIsWeatherOpen((prev) => !prev)}
@@ -232,65 +382,80 @@ export const AppContent: React.FC = () => {
         activeCustomerTab={activeCustomerTab}
         onSelectCustomerTab={setActiveCustomerTab}
         activeRoleTab={
-          currentProfile.role === 'customer'
+          !currentProfile || !currentProfile.role
+            ? undefined
+            : currentProfile.role === 'customer'
             ? activeCustomerTab
             : currentProfile.role === 'farmer'
             ? activeFarmerTab
             : activeDeliveryTab
         }
         onSelectRoleTab={(tab) => {
-          if (currentProfile.role === 'customer') setActiveCustomerTab(tab as any);
-          if (currentProfile.role === 'farmer') setActiveFarmerTab(tab as any);
-          if (currentProfile.role === 'delivery') setActiveDeliveryTab(tab as any);
+          if (currentProfile?.role === 'customer') setActiveCustomerTab(tab as any);
+          if (currentProfile?.role === 'farmer') setActiveFarmerTab(tab as any);
+          if (currentProfile?.role === 'delivery') setActiveDeliveryTab(tab as any);
         }}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        onOpenRoleModal={() => setIsRoleModalOpen(true)}
+        onOpenRoleModal={() => {
+          setAuthModalMode(currentProfile && authStatus === 'AUTHENTICATED' ? 'account' : 'auth');
+          setIsAuthModalOpen(true);
+        }}
+        onOpenAuthModal={(mode) => {
+          setAuthModalMode(mode || (currentProfile && authStatus === 'AUTHENTICATED' ? 'account' : 'auth'));
+          setIsAuthModalOpen(true);
+        }}
+        onLogout={handleLogout}
       />
 
       {/* Weather Advisory Panel */}
       {isWeatherOpen && <WeatherWidget onClose={() => setIsWeatherOpen(false)} language={language} />}
 
-      {/* Main Content Area based on User Role */}
+      {/* Main Content Area based on User Role & Auth Status */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {currentProfile.role === 'customer' && (
-          <CustomerView
-            currentProfile={currentProfile}
-            language={language}
-            activeTab={activeCustomerTab}
-            products={products}
-            cartItems={cartItems}
-            wishlist={wishlist}
-            orders={orders}
-            browseHistory={browseHistory}
-            onAddToCart={handleAddToCart}
-            onToggleWishlist={handleToggleWishlist}
-            onRefreshOrders={refreshUserData}
-            onSelectProduct={handleSelectProduct}
-            externalSearchTerm={searchQuery}
-            onSearchChange={setSearchQuery}
-          />
-        )}
+        {/* Authenticated Role Views */}
+        {authStatus === 'AUTHENTICATED' && currentProfile && (
+          <>
+            {currentProfile.role === 'customer' && (
+              <CustomerView
+                currentProfile={currentProfile}
+                language={language}
+                activeTab={activeCustomerTab}
+                products={products}
+                cartItems={cartItems}
+                wishlist={wishlist}
+                orders={orders}
+                browseHistory={browseHistory}
+                onAddToCart={handleAddToCart}
+                onToggleWishlist={handleToggleWishlist}
+                onRefreshOrders={refreshUserData}
+                onSelectProduct={handleSelectProduct}
+                externalSearchTerm={searchQuery}
+                onSearchChange={setSearchQuery}
+              />
+            )}
 
-        {currentProfile.role === 'farmer' && (
-          <FarmerView
-            currentProfile={currentProfile}
-            language={language}
-            onRefreshAll={refreshUserData}
-            externalTab={activeFarmerTab}
-            onSelectTab={setActiveFarmerTab}
-            onOpenFullAi={() => setIsAiOpen(true)}
-          />
-        )}
+            {currentProfile.role === 'farmer' && (
+              <FarmerView
+                currentProfile={currentProfile}
+                language={language}
+                onRefreshAll={refreshUserData}
+                externalTab={activeFarmerTab}
+                onSelectTab={setActiveFarmerTab}
+                onOpenFullAi={() => setIsAiOpen(true)}
+              />
+            )}
 
-        {currentProfile.role === 'delivery' && (
-          <DeliveryView
-            currentProfile={currentProfile}
-            language={language}
-            onRefreshAll={refreshUserData}
-            externalTab={activeDeliveryTab}
-            onSelectTab={setActiveDeliveryTab}
-          />
+            {currentProfile.role === 'delivery' && (
+              <DeliveryView
+                currentProfile={currentProfile}
+                language={language}
+                onRefreshAll={refreshUserData}
+                externalTab={activeDeliveryTab}
+                onSelectTab={setActiveDeliveryTab}
+              />
+            )}
+          </>
         )}
       </main>
 
@@ -307,22 +472,13 @@ export const AppContent: React.FC = () => {
         isCheckingOut={isCheckingOut}
       />
 
-      {/* Role & Persona Switcher Modal */}
-      <RoleSelectionModal
-        isOpen={isRoleModalOpen}
-        onClose={() => setIsRoleModalOpen(false)}
+      {/* Production Auth & Multi-Provider Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
         currentProfile={currentProfile}
-        onLoginSuccess={(prof) => {
-          setProfiles((prev) => {
-            const exists = prev.find((p) => p.id === prof.id);
-            if (exists) return prev.map((p) => (p.id === prof.id ? prof : p));
-            return [...prev, prof];
-          });
-          setCurrentProfile(prof);
-          if (prof.role === 'customer') {
-            setActiveCustomerTab('shop');
-          }
-        }}
+        initialMode={authModalMode}
+        onAuthSuccess={handleAuthSuccess}
         language={language}
       />
 

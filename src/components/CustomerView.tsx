@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Product, CartItem, WishlistItem, Order, BrowseHistoryItem, Profile, Language } from '../types';
 import { getTranslation } from '../lib/translations';
+import { formatQuantity, formatStock, formatOnlyLeft, normalizeUnit } from '../lib/quantity';
 
 interface CustomerViewProps {
   currentProfile: Profile;
@@ -334,7 +335,7 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
                         <div className="pt-2 flex items-baseline justify-between border-t border-white/[0.06]">
                           <div>
                             <span className="text-lg font-mono font-black text-white">₹{p.price}</span>
-                            <span className="text-xs text-zinc-400 font-medium">/{p.unit}</span>
+                            <span className="text-xs text-zinc-400 font-medium">/{normalizeUnit(p.unit)}</span>
                           </div>
 
                           <div>
@@ -344,11 +345,11 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
                               </span>
                             ) : isLowStock ? (
                               <span className="text-[11px] font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/30">
-                                {t.customer.onlyLeft.replace('{count}', String(p.stock))}
+                                {formatOnlyLeft(p.stock, p.unit, language)}
                               </span>
                             ) : (
                               <span className="text-[11px] text-emerald-400 font-medium">
-                                {p.stock} {p.unit} {t.customer.inStock}
+                                {formatStock(p.stock, p.unit, language)}
                               </span>
                             )}
                           </div>
@@ -410,7 +411,7 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
                         className="w-full h-24 object-cover rounded-lg mb-2"
                       />
                       <h4 className="text-xs font-bold text-white truncate">{prod.title}</h4>
-                      <p className="text-[11px] text-zinc-400 font-mono font-medium">₹{prod.price}/{prod.unit}</p>
+                      <p className="text-[11px] text-zinc-400 font-mono font-medium">₹{prod.price}/{normalizeUnit(prod.unit)}</p>
                     </div>
                   );
                 })}
@@ -588,7 +589,7 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
                             <div>
                               <span className="font-semibold text-white">{item.title}</span>
                               <span className="text-zinc-400 block text-[11px]">
-                                {item.quantity} {item.unit} × ₹{item.price}
+                                {formatQuantity(item.quantity, item.unit, language)} × ₹{item.price}
                               </span>
                             </div>
                           </div>
@@ -675,14 +676,14 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
                         </h4>
                         <div className="pt-2 flex items-baseline justify-between">
                           <span className="text-base font-mono font-black text-white">
-                            ₹{prod.price}/{prod.unit}
+                            ₹{prod.price}/{normalizeUnit(prod.unit)}
                           </span>
                           <span
                             className={`text-xs font-semibold ${
                               isOutOfStock ? 'text-rose-400' : 'text-emerald-400'
                             }`}
                           >
-                            {isOutOfStock ? t.customer.outOfStock : `${prod.stock} ${prod.unit} ${t.customer.inStock}`}
+                            {formatStock(prod.stock, prod.unit, language)}
                           </span>
                         </div>
                       </div>

@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import Groq from 'groq-sdk';
 import { Product, Order, WeatherDay, Role, Language } from '../types.js';
+import { formatQuantity, normalizeUnit } from '../lib/quantity.js';
 import {
   AIProvider,
   AssistantContext,
@@ -171,7 +172,7 @@ export class Farm2HomeAgronomistBrain {
           ? myProds
               .map(
                 (p) =>
-                  `- "${p.title}" (Category: ${p.category}, Stock: ${p.stock} ${p.unit}, Price: ₹${p.price}/${p.unit}, Organic: ${p.is_organic ? 'Yes' : 'No'})`
+                  `- "${p.title}" (Category: ${p.category}, stock_quantity: ${p.stock}, stock_unit: ${normalizeUnit(p.unit)}, Price: ₹${p.price}/${normalizeUnit(p.unit)}, Organic: ${p.is_organic ? 'Yes' : 'No'})`
               )
               .join('\n')
           : 'No crops currently listed in your Farm2Home catalog.';
@@ -182,15 +183,29 @@ export class Farm2HomeAgronomistBrain {
               .slice(0, 5)
               .map(
                 (o) =>
-                  `- Order ${o.id}: ${o.items.map((i) => `${i.quantity} ${i.unit} of ${i.title}`).join(', ')} (Status: ${o.status})`
+                  `- Order ${o.id}: ${o.items.map((i) => `${formatQuantity(i.quantity, i.unit)} of ${i.title}`).join(', ')} (Status: ${o.status})`
               )
               .join('\n')
           : 'No pending customer orders.';
 
-      marketplaceContextText = `FARMER'S ACTIVE FARM2HOME INVENTORY & ORDERS:
+      const myCropPlans = context.farmerCropPlans || [];
+      const plansSummary =
+        myCropPlans.length > 0
+          ? myCropPlans
+              .map(
+                (cp) =>
+                  `- "${cp.crop_name}" (Status: ${cp.status}, Season: ${cp.season || 'N/A'}, Area: ${cp.area_acres ? `${cp.area_acres} acres` : 'N/A'}${cp.notes ? `, Notes: ${cp.notes}` : ''})`
+              )
+              .join('\n')
+          : 'No specific seasonal crop plans recorded.';
+
+      marketplaceContextText = `FARMER'S ACTIVE FARM2HOME INVENTORY, CROP PLANS & ORDERS:
 Farmer Name: ${context.userName || 'Registered Farmer'}
 Current Listed Products (${myProds.length}):
 ${prodSummary}
+
+Active Seasonal Crop Plans (${myCropPlans.length}):
+${plansSummary}
 
 Recent Customer Orders:
 ${ordSummary}`;
@@ -201,7 +216,7 @@ ${ordSummary}`;
           ? availableProds
               .map(
                 (p) =>
-                  `- ${p.title} from ${p.farmer_name || 'Verified Farmer'} (₹${p.price}/${p.unit}, ${p.is_organic ? 'Organic Certified' : 'Fresh Farm'})`
+                  `- ${p.title} from ${p.farmer_name || 'Verified Farmer'} (₹${p.price}/${normalizeUnit(p.unit)}, ${p.is_organic ? 'Organic Certified' : 'Fresh Farm'})`
               )
               .join('\n')
           : 'Fresh seasonal produce available in marketplace.';

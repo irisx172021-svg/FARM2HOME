@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { X, Plus, Minus, Trash2, ShoppingBag, ShieldCheck, MapPin, AlertCircle, ArrowRight } from 'lucide-react';
 import { CartItem, Profile, Language } from '../types';
 import { getTranslation } from '../lib/translations';
+import { formatQuantity, formatOnlyLeft, normalizeUnit } from '../lib/quantity';
 
 interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   cartItems: CartItem[];
-  currentProfile: Profile;
+  currentProfile: Profile | null;
   language: Language;
   onUpdateQuantity: (cartItemId: string, newQty: number) => Promise<void>;
   onRemoveItem: (cartItemId: string) => Promise<void>;
@@ -28,9 +29,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 }) => {
   const t = getTranslation(language);
   const [address, setAddress] = useState(
-    currentProfile.location || 'Flat 402, Green Valley Apts, Hitech City, Hyderabad - 500081'
+    currentProfile?.location || 'Flat 402, Green Valley Apts, Hitech City, Hyderabad - 500081'
   );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (currentProfile?.location) {
+      setAddress((prev) => (!prev || prev.includes('Flat 402') ? currentProfile.location! : prev));
+    }
+  }, [currentProfile?.location]);
 
   if (!isOpen) return null;
 
@@ -157,7 +164,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       <div className="mt-2 flex items-center justify-between">
                         <div className="text-xs font-bold font-mono text-emerald-400">
                           ₹{prod?.price}
-                          <span className="text-[10px] text-zinc-500 font-normal">/{prod?.unit}</span>
+                          <span className="text-[10px] text-zinc-500 font-normal">/{normalizeUnit(prod?.unit)}</span>
                         </div>
 
                         {/* Quantity Counter Pill */}
@@ -195,7 +202,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       {isExceeded && !isOutOfStock && (
                         <p className="text-[10px] text-amber-400 font-medium mt-1.5 flex items-center gap-1">
                           <AlertCircle className="w-3 h-3" />
-                          {t.customer.onlyLeft} {prod.stock} {prod.unit}
+                          {formatOnlyLeft(prod.stock, prod.unit, language)}
                         </p>
                       )}
                     </div>

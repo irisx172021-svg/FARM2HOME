@@ -15,12 +15,15 @@ import {
   Sparkles,
   History,
   CloudSun,
+  LogIn,
+  Loader2,
 } from 'lucide-react';
-import { Profile, Language } from '../types';
+import { Profile, Language, AuthStatus, Role } from '../types';
 import { getTranslation } from '../lib/translations';
 
 interface HeaderProps {
-  currentProfile: Profile;
+  authStatus?: AuthStatus;
+  currentProfile: Profile | null;
   profiles: Profile[];
   onSelectProfile: (profile: Profile) => void;
   language: Language;
@@ -38,11 +41,14 @@ interface HeaderProps {
   activeRoleTab?: string;
   onSelectRoleTab?: (tab: string) => void;
   onOpenRoleModal?: () => void;
+  onOpenAuthModal?: (mode?: 'auth' | 'onboarding' | 'account') => void;
+  onLogout?: () => void;
   searchQuery?: string;
   onSearchChange?: (q: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  authStatus = 'AUTHENTICATED',
   currentProfile,
   profiles,
   onSelectProfile,
@@ -61,10 +67,19 @@ export const Header: React.FC<HeaderProps> = ({
   activeRoleTab,
   onSelectRoleTab,
   onOpenRoleModal,
+  onOpenAuthModal,
+  onLogout,
   searchQuery = '',
   onSearchChange,
 }) => {
   const t = getTranslation(language);
+
+  // Explicit Auth State Derivations
+  const isAuthLoading = authStatus === 'AUTH_LOADING' || authStatus === 'PROFILE_LOADING';
+  const isAuthenticated = authStatus === 'AUTHENTICATED' && !!currentProfile?.role;
+  const isUnauthenticated = authStatus === 'UNAUTHENTICATED' || (!isAuthLoading && !currentProfile);
+
+  const currentRole: Role | null = isAuthenticated && currentProfile ? currentProfile.role : null;
 
   const handleTabClick = (tabKey: string) => {
     if (tabKey === 'weather') {
@@ -79,14 +94,14 @@ export const Header: React.FC<HeaderProps> = ({
     if (onSelectRoleTab) {
       onSelectRoleTab(tabKey);
     }
-    if (currentProfile.role === 'customer' && onSelectCustomerTab) {
+    if (currentRole === 'customer' && onSelectCustomerTab) {
       if (tabKey === 'shop' || tabKey === 'orders' || tabKey === 'wishlist') {
         onSelectCustomerTab(tabKey);
       }
     }
   };
 
-  const currentActiveTab = activeRoleTab || (currentProfile.role === 'customer' ? activeCustomerTab : '');
+  const currentActiveTab = activeRoleTab || (currentRole === 'customer' ? activeCustomerTab : '');
 
   return (
     <header className="sticky top-0 z-40 bg-[#09090b]/85 text-white shadow-xl shadow-black/40 border-b border-white/[0.08] backdrop-blur-xl">
@@ -159,65 +174,64 @@ export const Header: React.FC<HeaderProps> = ({
               </select>
             </div>
 
-            {/* Persona Switcher Dropdown */}
-            <div className="flex items-center gap-0.5 bg-[#121418] border border-white/[0.08] rounded-lg p-0.5 hover:border-white/[0.15] transition-colors">
-              <select
-                value={currentProfile.id}
-                onChange={(e) => {
-                  const found = profiles.find((p) => p.id === e.target.value);
-                  if (found) onSelectProfile(found);
-                }}
-                className="py-1 px-2 bg-transparent text-xs font-bold text-zinc-200 focus:outline-none cursor-pointer max-w-[125px] sm:max-w-[160px] truncate"
-                title={t.header.switchPersona}
-              >
-                <optgroup label={t.header.farmersGroup} className="bg-[#09090b] text-white font-normal">
-                  {profiles
-                    .filter((p) => p.role === 'farmer')
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        🌾 {p.full_name}
-                      </option>
-                    ))}
-                </optgroup>
-                <optgroup label={t.header.customersGroup} className="bg-[#09090b] text-white font-normal">
-                  {profiles
-                    .filter((p) => p.role === 'customer')
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        🛒 {p.full_name}
-                      </option>
-                    ))}
-                </optgroup>
-                <optgroup label={t.header.deliveryGroup} className="bg-[#09090b] text-white font-normal">
-                  {profiles
-                    .filter((p) => p.role === 'delivery')
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        🚚 {p.full_name}
-                      </option>
-                    ))}
-                </optgroup>
-              </select>
-
-              {onOpenRoleModal && (
+            {/* User Account / Authentication Action */}
+            {isAuthLoading ? (
+              <div className="flex items-center gap-2 py-1.5 px-3 bg-[#121418] border border-white/[0.08] rounded-xl animate-pulse">
+                <Loader2 className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+                <span className="text-[11px] text-zinc-400 font-medium hidden sm:inline">Loading...</span>
+              </div>
+            ) : isAuthenticated && currentProfile ? (
+              <div className="flex items-center gap-1.5">
                 <button
-                  onClick={onOpenRoleModal}
-                  className="p-1.5 text-zinc-400 hover:text-emerald-400 hover:bg-white/5 rounded-md transition-colors"
-                  title={t.header.switchAccount}
+                  onClick={() => (onOpenAuthModal ? onOpenAuthModal('account') : onOpenRoleModal && onOpenRoleModal())}
+                  className="flex items-center gap-2 py-1 px-2.5 bg-[#121418] hover:bg-[#181b20] border border-white/[0.08] hover:border-emerald-500/40 rounded-xl transition-all cursor-pointer group"
+                  title={t.auth.accountSettings}
                 >
-                  <UserCheck className="w-3.5 h-3.5" />
+                  <div className="w-6 h-6 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-xs font-black">
+                    {currentRole === 'farmer' ? '🌾' : currentRole === 'customer' ? '🛒' : '🚚'}
+                  </div>
+                  <div className="text-left hidden sm:block max-w-[130px] truncate">
+                    <p className="text-xs font-bold text-white group-hover:text-emerald-400 transition-colors truncate">
+                      {currentProfile.full_name}
+                    </p>
+                    <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold">
+                      {currentRole === 'farmer'
+                        ? t.auth.farmerRole
+                        : currentRole === 'customer'
+                        ? t.auth.customerRole
+                        : t.auth.deliveryRole}
+                    </p>
+                  </div>
                 </button>
-              )}
-            </div>
 
-            {/* Wishlist Button (Customer Role Only) */}
-            {currentProfile.role === 'customer' && (
+                {onLogout && (
+                  <button
+                    onClick={onLogout}
+                    className="p-2 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors border border-transparent hover:border-rose-500/20 cursor-pointer"
+                    title={t.auth.signOut}
+                  >
+                    <LogIn className="w-4 h-4 rotate-180" />
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => (onOpenAuthModal ? onOpenAuthModal('auth') : onOpenRoleModal && onOpenRoleModal())}
+                className="py-1.5 px-3 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>{t.auth.signIn}</span>
+              </button>
+            )}
+
+            {/* Wishlist Button (Authenticated Customer Role Only) */}
+            {isAuthenticated && currentRole === 'customer' && (
               <button
                 onClick={() => {
                   if (onSelectCustomerTab) onSelectCustomerTab('wishlist');
                   if (onOpenWishlist) onOpenWishlist();
                 }}
-                className="relative p-2 rounded-lg bg-[#121418] hover:bg-[#181b20] border border-white/[0.08] hover:border-emerald-500/30 text-zinc-300 hover:text-white transition-colors"
+                className="relative p-2 rounded-lg bg-[#121418] hover:bg-[#181b20] border border-white/[0.08] hover:border-emerald-500/30 text-zinc-300 hover:text-white transition-colors cursor-pointer"
                 title={t.header.savedWishlist}
               >
                 <Heart className="w-4 h-4 text-zinc-400 hover:text-rose-400" />
@@ -229,11 +243,11 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Cart Button (Customer Role Only) */}
-            {currentProfile.role === 'customer' && (
+            {/* Cart Button (Authenticated Customer Role Only) */}
+            {isAuthenticated && currentRole === 'customer' && (
               <button
                 onClick={onOpenCart}
-                className="relative p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:text-emerald-300 transition-all shadow-[0_0_10px_rgba(16,185,129,0.1)]"
+                className="relative p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:text-emerald-300 transition-all shadow-[0_0_10px_rgba(16,185,129,0.1)] cursor-pointer"
                 title={t.header.viewCart}
               >
                 <ShoppingCart className="w-4 h-4 text-emerald-400" />
@@ -253,8 +267,32 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 py-1.5 text-xs">
           {/* Main Role Tabs */}
           <div className="flex items-center gap-1 sm:gap-1.5">
-            {/* CUSTOMER TABS */}
-            {currentProfile.role === 'customer' && (
+            {/* 1. Loading State */}
+            {isAuthLoading && (
+              <div className="flex items-center gap-2 py-1 px-2 text-xs text-zinc-400">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400 shrink-0" />
+                <span className="text-[11px] font-medium text-zinc-400">
+                  {authStatus === 'AUTH_LOADING' ? 'Connecting to Agri-Grid...' : 'Authenticating profile...'}
+                </span>
+              </div>
+            )}
+
+            {/* 2. Unauthenticated State */}
+            {isUnauthenticated && (
+              <div className="flex items-center gap-2 text-xs text-zinc-400 py-0.5">
+                <span className="font-semibold text-emerald-400 flex items-center gap-1">
+                  <Sprout className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>Farm2Home Marketplace</span>
+                </span>
+                <span className="text-zinc-600 hidden sm:inline">•</span>
+                <span className="text-zinc-500 text-[11px] hidden sm:inline">
+                  Direct harvest from verified Indian farms • 0% middleman fees
+                </span>
+              </div>
+            )}
+
+            {/* 3. Authenticated State: CUSTOMER TABS */}
+            {isAuthenticated && currentRole === 'customer' && (
               <>
                 <button
                   onClick={() => handleTabClick('shop')}
@@ -294,8 +332,8 @@ export const Header: React.FC<HeaderProps> = ({
               </>
             )}
 
-            {/* FARMER TABS */}
-            {currentProfile.role === 'farmer' && (
+            {/* 4. Authenticated State: FARMER TABS */}
+            {isAuthenticated && currentRole === 'farmer' && (
               <>
                 <button
                   onClick={() => handleTabClick('overview')}
@@ -359,8 +397,8 @@ export const Header: React.FC<HeaderProps> = ({
               </>
             )}
 
-            {/* DELIVERY TABS */}
-            {currentProfile.role === 'delivery' && (
+            {/* 5. Authenticated State: DELIVERY TABS */}
+            {isAuthenticated && currentRole === 'delivery' && (
               <>
                 <button
                   onClick={() => handleTabClick('history')}
@@ -432,3 +470,4 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+

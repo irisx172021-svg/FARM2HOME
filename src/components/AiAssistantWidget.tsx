@@ -23,7 +23,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 interface AiAssistantWidgetProps {
   onClose: () => void;
   language: Language;
-  currentProfile: Profile;
+  currentProfile: Profile | null;
 }
 
 interface ChatMessage {
@@ -162,9 +162,11 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({
     },
   };
 
+  const effectiveRole: Role = currentProfile?.role || 'customer';
+
   const currentRolePrompts =
-    (quickPromptsByLang[language] && quickPromptsByLang[language][currentProfile.role]) ||
-    quickPromptsByLang.en[currentProfile.role];
+    (quickPromptsByLang[language] && quickPromptsByLang[language][effectiveRole]) ||
+    quickPromptsByLang.en[effectiveRole];
 
   const handleImagePick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -228,9 +230,9 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({
       const res: AssistantResponse = await api.askAiAssistant(
         query.trim() || 'Please examine this crop image for symptoms, disease indicators, or pests.',
         language,
-        currentProfile.role,
+        effectiveRole,
         {
-          userId: currentProfile.id,
+          userId: currentProfile?.id || 'guest_user',
           history: historyPayload,
           image: currentImage
             ? {
@@ -293,7 +295,7 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({
             <h3 className="text-xs font-bold flex items-center gap-1.5">
               <span>{t.ai.title}</span>
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                {currentProfile.role === 'farmer' ? t.auth.farmerRole : currentProfile.role === 'customer' ? t.auth.customerRole : t.auth.deliveryRole}
+                {effectiveRole === 'farmer' ? t.auth.farmerRole : effectiveRole === 'customer' ? t.auth.customerRole : t.auth.deliveryRole}
               </span>
             </h3>
             <p className="text-[10px] text-zinc-400">

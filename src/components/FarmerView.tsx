@@ -36,6 +36,14 @@ import {
 import { Product, Order, Profile, Language, DemandAnalytics, WeatherDay, AssistantResponse } from '../types';
 import { getTranslation } from '../lib/translations';
 import { api } from '../lib/api';
+import {
+  formatQuantity,
+  formatStock,
+  formatOnlyLeft,
+  normalizeUnit,
+  formatOrderItemSummary,
+  isValidQuantityForUnit,
+} from '../lib/quantity';
 import { CropPlannerSection } from './CropPlannerSection';
 import { WeatherCropAdvisory } from './WeatherCropAdvisory';
 import { FarmerAiAdvisoryCard } from './FarmerAiAdvisoryCard';
@@ -170,6 +178,17 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
   const pendingOrders = useMemo(() => {
     return farmerOrders.filter((o) => o.status === 'pending');
   }, [farmerOrders]);
+
+  const stockSummaryByUnit = useMemo(() => {
+    const summary: Record<string, number> = {};
+    for (const p of farmerProducts) {
+      const u = normalizeUnit(p.unit);
+      summary[u] = (summary[u] || 0) + p.stock;
+    }
+    const entries = Object.entries(summary);
+    if (entries.length === 0) return '0 items';
+    return entries.map(([u, qty]) => formatQuantity(qty, u, language)).join(' · ');
+  }, [farmerProducts, language]);
 
   const totalCurrentStockUnits = useMemo(() => {
     return farmerProducts.reduce((sum, p) => sum + p.stock, 0);
@@ -353,6 +372,13 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
       return;
     }
 
+    const stockNum = Number(formData.stock);
+    const stockVal = isValidQuantityForUnit(stockNum, formData.unit);
+    if (!stockVal.valid) {
+      setFormError(stockVal.error || 'Invalid stock quantity for the selected unit');
+      return;
+    }
+
     try {
       if (editingProduct) {
         await api.updateProduct(editingProduct.id, {
@@ -448,7 +474,7 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
               <span aria-hidden="true" className="text-zinc-600">·</span>
               <span className="flex items-center gap-1 text-zinc-400">
                 <MapPin className="w-3 h-3 text-zinc-500" />
-                {currentProfile.location || 'Warangal, Telangana'}
+                {currentProfile?.location || 'Warangal, Telangana'}
               </span>
             </div>
           </div>
@@ -650,15 +676,15 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
                   </div>
                   <div className="mt-2">
                     <div className="text-2xl font-bold font-mono text-white">
-                      {lowStockProducts.length > 0 ? `${lowStockProducts.length} low` : totalCurrentStockUnits}
+                      {lowStockProducts.length > 0 ? `${lowStockProducts.length} low` : `${farmerProducts.length} crops`}
                       <span className="text-xs font-normal text-zinc-500 ml-1.5">
-                        {lowStockProducts.length > 0 ? 'need restock' : t.common.units}
+                        {lowStockProducts.length > 0 ? 'need restock' : 'active'}
                       </span>
                     </div>
                     <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed truncate">
                       {lowStockProducts.length > 0
-                        ? lowStockProducts.map((p) => `${p.title} (${p.stock} ${p.unit})`).join(', ')
-                        : `${farmerProducts.length} listed crops in harvest stock`}
+                        ? lowStockProducts.map((p) => `${p.title} (${formatQuantity(p.stock, p.unit, language)})`).join(', ')
+                        : stockSummaryByUnit}
                     </p>
                   </div>
                 </div>
@@ -737,7 +763,7 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
                   <span>{t.farmer.farmOverview}</span>
                 </h3>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  {currentProfile.farm_name || 'Sustainable Agro Plot'} · {currentProfile.location || 'Warangal, Telangana'}
+                  {currentProfile?.farm_name || 'Sustainable Agro Plot'} · {currentProfile?.location || 'Warangal, Telangana'}
                 </p>
               </div>
 
@@ -809,7 +835,7 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
                         {farmerProducts.map((p, idx) => (
                           <span key={p.id}>
                             <span className="text-white font-medium">{p.title}</span>
-                            <span className="text-zinc-500 font-mono ml-1">({p.stock} {p.unit})</span>
+                            <span className="text-zinc-500 font-mono ml-1">({formatQuantity(p.stock, p.unit, language)})</span>
                             {idx < farmerProducts.length - 1 && (
                               <span aria-hidden="true" className="text-zinc-600 mx-2">·</span>
                             )}
@@ -820,7 +846,7 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
                       <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/[0.04] text-[11px]">
                         <div>
                           <span className="text-zinc-500 block">Total Harvest Volume</span>
-                          <span className="text-white font-mono font-bold">{totalCurrentStockUnits} {t.common.units}</span>
+                          <span className="text-white font-mono font-bold">{stockSummaryByUnit}</span>
                         </div>
                         <div>
                           <span className="text-zinc-500 block">Healthy vs Low Stock</span>
@@ -1107,7 +1133,7 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
                           <div key={idx} className="space-y-1 text-xs">
                             <div className="flex justify-between text-zinc-300">
                               <span>{tc.title}</span>
-                              <span className="text-zinc-400 font-mono">{tc.volume} {t.common.units} • ₹{tc.revenue}</span>
+                              <span className="text-zinc-400 font-mono">{formatQuantity(tc.volume, tc.unit, language)} • ₹{tc.revenue}</span>
                             </div>
                             <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
                               <div
@@ -1228,7 +1254,7 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
                         </div>
                         <h4 className="text-sm font-bold text-white mt-1 truncate">{p.title}</h4>
                         <div className="mt-1 text-xs font-mono font-black text-white">
-                          ₹{p.price} <span className="text-[11px] font-normal text-zinc-400">/{p.unit}</span>
+                          ₹{p.price} <span className="text-[11px] font-normal text-zinc-400">/{normalizeUnit(p.unit)}</span>
                         </div>
                       </div>
                     </div>
@@ -1245,7 +1271,7 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
                               : 'text-emerald-400'
                           }`}
                         >
-                          {p.stock} {p.unit} {isLowStock && `(${t.customer.onlyLeft.replace('{count}', String(p.stock))})`}
+                          {formatStock(p.stock, p.unit, language)}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -1334,7 +1360,7 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
                     </p>
 
                     <div className="text-zinc-400">
-                      {t.customer.allProduce}: {ord.items.map((i) => `${i.title} (${i.quantity} ${i.unit})`).join(', ')}
+                      {t.customer.allProduce}: {ord.items.map((i) => formatOrderItemSummary(i.title, i.quantity, i.unit, language)).join(', ')}
                     </div>
 
                     <p className="text-[11px] text-zinc-500">
@@ -1390,7 +1416,7 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
       {activeTab === 'planner' && (
         <CropPlannerSection
           weatherForecast={forecast}
-          farmerLocation={currentProfile.location}
+          farmerLocation={currentProfile?.location}
           language={language}
         />
       )}
@@ -1486,7 +1512,7 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
                       </div>
                       <div>
                         <span className="text-zinc-500 block text-[10px] uppercase font-bold">{t.farmer.stockAvailability}</span>
-                        <span className="text-emerald-400 font-mono font-bold">{item.stock} {item.unit}</span>
+                        <span className="text-emerald-400 font-mono font-bold">{formatQuantity(item.stock, item.unit, language)}</span>
                       </div>
                     </div>
                   </div>
@@ -1504,7 +1530,7 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
                   <div key={idx} className="space-y-1.5 text-xs">
                     <div className="flex justify-between text-zinc-300">
                       <span className="font-medium text-white">{tc.title}</span>
-                      <span className="text-zinc-400 font-mono">{tc.volume} {t.common.units} • ₹{tc.revenue}</span>
+                      <span className="text-zinc-400 font-mono">{formatQuantity(tc.volume, tc.unit, language)} • ₹{tc.revenue}</span>
                     </div>
                     <div className="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
                       <div
@@ -1575,11 +1601,14 @@ export const FarmerView: React.FC<FarmerViewProps> = ({
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                     className="w-full p-2.5 bg-[#121418] border border-white/[0.08] text-white rounded-xl focus:outline-none focus:border-emerald-500/50"
                   >
-                    <option value="kg" className="bg-[#09090b]">{t.units.kg}</option>
-                    <option value="g" className="bg-[#09090b]">{t.units.gram}</option>
-                    <option value="bunch" className="bg-[#09090b]">{t.units.bunch}</option>
-                    <option value="pack" className="bg-[#09090b]">Pack</option>
-                    <option value="liter" className="bg-[#09090b]">{t.units.liter}</option>
+                    <option value="kg" className="bg-[#09090b]">kg (Kilogram)</option>
+                    <option value="g" className="bg-[#09090b]">g (Gram)</option>
+                    <option value="piece" className="bg-[#09090b]">piece (Count)</option>
+                    <option value="bunch" className="bg-[#09090b]">bunch (Bundle)</option>
+                    <option value="crate" className="bg-[#09090b]">crate (Bulk crate)</option>
+                    <option value="box" className="bg-[#09090b]">box (Pack box)</option>
+                    <option value="unit" className="bg-[#09090b]">unit (Item)</option>
+                    <option value="L" className="bg-[#09090b]">L (Litre)</option>
                   </select>
                 </div>
               </div>

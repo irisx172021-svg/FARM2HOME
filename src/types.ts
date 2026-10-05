@@ -1,8 +1,32 @@
 export type UserRole = 'customer' | 'farmer' | 'delivery';
 export type Role = UserRole;
 
+export type AuthStatus = 'AUTH_LOADING' | 'PROFILE_LOADING' | 'AUTHENTICATED' | 'UNAUTHENTICATED';
+
 export type LanguageCode = 'en' | 'te' | 'hi' | 'ta';
 export type Language = LanguageCode;
+
+export type AuthProvider = 'google' | 'phone' | 'email' | 'passkey';
+
+export interface AuthIdentityInfo {
+  provider: AuthProvider;
+  providerUid: string;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
+export interface UserAccount {
+  userId: string;
+  displayName: string;
+  email?: string;
+  phone?: string;
+  role?: UserRole;
+  preferredLanguage?: LanguageCode;
+  avatarUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+  linkedProviders: AuthProvider[];
+}
 
 export type ProductCategory =
   | 'Vegetables'
@@ -17,19 +41,26 @@ export type ProductUnit = 'kg' | 'gram' | 'bunch' | 'liter' | 'piece';
 export type OrderStatus = 'pending' | 'accepted' | 'out_for_delivery' | 'delivered' | 'cancelled';
 
 export interface Profile {
-  id: string; // matches auth.uid
+  id: string; // canonical userId
+  user_id?: string;
   auth_method: 'phone' | 'email' | string;
   phone_number?: string;
   email?: string;
   full_name: string;
+  fullName?: string;
+  name?: string;
   role: UserRole;
+  preferred_language?: LanguageCode;
   avatar_url?: string;
   location?: string;
   created_at: string;
+  updated_at?: string;
   // Farmer specific fields
   farm_name?: string;
   approved?: boolean;
   certificate_url?: string;
+  // Linked auth methods
+  linked_providers?: AuthProvider[];
 }
 
 export interface Product {
@@ -114,6 +145,21 @@ export interface Review {
   rating: number;
   comment: string;
   created_at: string;
+  product_id?: string;
+}
+
+export interface CropPlan {
+  id: string;
+  farmer_id: string;
+  crop_name: string;
+  season?: string;
+  planting_date?: string;
+  expected_harvest_date?: string;
+  area_acres?: number;
+  notes?: string;
+  status: 'PLANNED' | 'GROWING' | 'HARVESTED' | 'CANCELLED' | string;
+  created_at: string;
+  updated_at?: string;
 }
 
 export interface DemandAnalytics {
@@ -123,7 +169,7 @@ export interface DemandAnalytics {
   meanVolume: number;
   medianVolume: number;
   modeVolume: number;
-  topCrops: { title: string; volume: number; revenue: number }[];
+  topCrops: { title: string; volume: number; revenue: number; unit?: string }[];
   seasonalTrends: { month: string; sales: number; cropName: string }[];
   plantingSuggestions: { crop: string; demandLevel: 'High' | 'Critical Shortage' | 'Medium'; reason: string }[];
 }
@@ -188,5 +234,26 @@ export interface AssistantResponse {
   needs_more_information?: boolean;
   follow_up_questions?: string[];
   warnings?: string[];
+}
+
+export interface AiConversation {
+  id: string;
+  user_id: string;
+  role: string;
+  title?: string;
+  language?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiMessage {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  role: 'user' | 'model' | 'system' | 'assistant';
+  content: string;
+  language?: string;
+  metadata?: any;
+  created_at: string;
 }
 

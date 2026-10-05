@@ -1,4 +1,4 @@
-import { Product, Order, WeatherDay, Role, Language } from '../../types.js';
+import { Product, Order, WeatherDay, Role, Language, CropPlan } from '../../types.js';
 
 export type AuthenticatedRole = 'CUSTOMER' | 'FARMER' | 'DELIVERY_PARTNER';
 
@@ -39,6 +39,7 @@ export interface AssistantContext {
   currentSeason?: string;
   farmerProducts?: Product[];
   farmerOrders?: Order[];
+  farmerCropPlans?: CropPlan[];
   // Customer specific context
   availableMarketProducts?: Product[];
   customerOrders?: Order[];
